@@ -41,6 +41,27 @@ const (
 // The length of one instance of each data type in bytes.
 var lengths = [...]uint32{0, 1, 1, 2, 4, 8, 1, 0, 2, 4, 8, 4, 8}
 
+const (
+	cNewSubfileType      = 254
+	cImageWidth          = 256
+	cImageLength         = 257
+	cBitsPerSample       = 258
+	cCompression         = 259
+	cPhotometricInterpr  = 262
+	cSamplesPerPixel     = 277
+
+	cTileWidth           = 322
+	cTileLength          = 323
+	cTileOffsets         = 324
+	cTileByteCounts      = 325
+	cSampleFormat        = 339
+)
+
+
+
+
+
+/*
 // Tags (see p. 28-41 of the spec).
 const (
 	tImageWidth                = 256
@@ -87,51 +108,51 @@ const (
 // Key ID Summary
 const (
 	//GeoTIFF Configuration Keys
-	GTModelTypeGeoKey  = 1024 /* Section 6.3.1.1 Codes */
-	GTRasterTypeGeoKey = 1025 /* Section 6.3.1.2 Codes */
-	GTCitationGeoKey   = 1026 /* documentation */
+	GTModelTypeGeoKey  = 1024 // Section 6.3.1.1 Codes
+	GTRasterTypeGeoKey = 1025 // Section 6.3.1.2 Codes
+	GTCitationGeoKey   = 1026 // documentation
 
 	// Geographic CS Parameter Keys
-	GeographicTypeGeoKey        = 2048 /* Section 6.3.2.1 Codes */
-	GeogCitationGeoKey          = 2049 /* documentation */
-	GeogGeodeticDatumGeoKey     = 2050 /* Section 6.3.2.2 Codes */
-	GeogPrimeMeridianGeoKey     = 2051 /* Section 6.3.2.4 codes */
-	GeogLinearUnitsGeoKey       = 2052 /* Section 6.3.1.3 Codes */
-	GeogLinearUnitSizeGeoKey    = 2053 /* meters */
-	GeogAngularUnitsGeoKey      = 2054 /* Section 6.3.1.4 Codes */
-	GeogAngularUnitSizeGeoKey   = 2055 /* radians */
-	GeogEllipsoidGeoKey         = 2056 /* Section 6.3.2.3 Codes */
-	GeogSemiMajorAxisGeoKey     = 2057 /* GeogLinearUnits */
-	GeogSemiMinorAxisGeoKey     = 2058 /* GeogLinearUnits */
-	GeogInvFlatteningGeoKey     = 2059 /* ratio */
-	GeogAzimuthUnitsGeoKey      = 2060 /* Section 6.3.1.4 Codes */
-	GeogPrimeMeridianLongGeoKey = 2061 /* GeogAngularUnit */
+	GeographicTypeGeoKey        = 2048 // Section 6.3.2.1 Codes
+	GeogCitationGeoKey          = 2049 // documentation
+	GeogGeodeticDatumGeoKey     = 2050 // Section 6.3.2.2 Codes
+	GeogPrimeMeridianGeoKey     = 2051 // Section 6.3.2.4 codes
+	GeogLinearUnitsGeoKey       = 2052 // Section 6.3.1.3 Codes
+	GeogLinearUnitSizeGeoKey    = 2053 // meters
+	GeogAngularUnitsGeoKey      = 2054 // Section 6.3.1.4 Codes
+	GeogAngularUnitSizeGeoKey   = 2055 // radians
+	GeogEllipsoidGeoKey         = 2056 // Section 6.3.2.3 Codes
+	GeogSemiMajorAxisGeoKey     = 2057 // GeogLinearUnits
+	GeogSemiMinorAxisGeoKey     = 2058 // GeogLinearUnits
+	GeogInvFlatteningGeoKey     = 2059 // ratio
+	GeogAzimuthUnitsGeoKey      = 2060 // Section 6.3.1.4 Codes
+	GeogPrimeMeridianLongGeoKey = 2061 // GeogAngularUnit
 
 	// Projected CS Parameter Keys
-	ProjectedCSTypeGeoKey          = 3072 /* Section 6.3.3.1 codes */
-	PCSCitationGeoKey              = 3073 /* documentation */
-	ProjectionGeoKey               = 3074 /* Section 6.3.3.2 codes */
-	ProjCoordTransGeoKey           = 3075 /* Section 6.3.3.3 codes */
-	ProjLinearUnitsGeoKey          = 3076 /* Section 6.3.1.3 codes */
-	ProjLinearUnitSizeGeoKey       = 3077 /* meters */
-	ProjStdParallel1GeoKey         = 3078 /* GeogAngularUnit */
-	ProjStdParallel2GeoKey         = 3079 /* GeogAngularUnit */
-	ProjNatOriginLongGeoKey        = 3080 /* GeogAngularUnit */
-	ProjNatOriginLatGeoKey         = 3081 /* GeogAngularUnit */
-	ProjFalseEastingGeoKey         = 3082 /* ProjLinearUnits */
-	ProjFalseNorthingGeoKey        = 3083 /* ProjLinearUnits */
-	ProjFalseOriginLongGeoKey      = 3084 /* GeogAngularUnit */
-	ProjFalseOriginLatGeoKey       = 3085 /* GeogAngularUnit */
-	ProjFalseOriginEastingGeoKey   = 3086 /* ProjLinearUnits */
-	ProjFalseOriginNorthingGeoKey  = 3087 /* ProjLinearUnits */
-	ProjCenterLongGeoKey           = 3088 /* GeogAngularUnit */
-	ProjCenterLatGeoKey            = 3089 /* GeogAngularUnit */
-	ProjCenterEastingGeoKey        = 3090 /* ProjLinearUnits */
-	ProjCenterNorthingGeoKey       = 3091 /* ProjLinearUnits */
-	ProjScaleAtNatOriginGeoKey     = 3092 /* ratio */
-	ProjScaleAtCenterGeoKey        = 3093 /* ratio */
-	ProjAzimuthAngleGeoKey         = 3094 /* GeogAzimuthUnit */
-	ProjStraightVertPoleLongGeoKey = 3095 /* GeogAngularUnit */
+	ProjectedCSTypeGeoKey          = 3072 // Section 6.3.3.1 codes
+	PCSCitationGeoKey              = 3073 // documentation
+	ProjectionGeoKey               = 3074 // Section 6.3.3.2 codes
+	ProjCoordTransGeoKey           = 3075 // Section 6.3.3.3 codes
+	ProjLinearUnitsGeoKey          = 3076 // Section 6.3.1.3 codes
+	ProjLinearUnitSizeGeoKey       = 3077 // meters
+	ProjStdParallel1GeoKey         = 3078 // GeogAngularUnit
+	ProjStdParallel2GeoKey         = 3079 // GeogAngularUnit
+	ProjNatOriginLongGeoKey        = 3080 // GeogAngularUnit
+	ProjNatOriginLatGeoKey         = 3081 // GeogAngularUnit
+	ProjFalseEastingGeoKey         = 3082 // ProjLinearUnits
+	ProjFalseNorthingGeoKey        = 3083 // ProjLinearUnits
+	ProjFalseOriginLongGeoKey      = 3084 // GeogAngularUnit
+	ProjFalseOriginLatGeoKey       = 3085 // GeogAngularUnit
+	ProjFalseOriginEastingGeoKey   = 3086 // ProjLinearUnits
+	ProjFalseOriginNorthingGeoKey  = 3087 // ProjLinearUnits
+	ProjCenterLongGeoKey           = 3088 // GeogAngularUnit
+	ProjCenterLatGeoKey            = 3089 // GeogAngularUnit
+	ProjCenterEastingGeoKey        = 3090 // ProjLinearUnits
+	ProjCenterNorthingGeoKey       = 3091 // ProjLinearUnits
+	ProjScaleAtNatOriginGeoKey     = 3092 // ratio
+	ProjScaleAtCenterGeoKey        = 3093 // ratio
+	ProjAzimuthAngleGeoKey         = 3094 // GeogAzimuthUnit
+	ProjStraightVertPoleLongGeoKey = 3095 // GeogAngularUnit
 )
 
 const (
@@ -163,6 +184,7 @@ const (
 	CT_NewZealandMapGrid              = 26
 	CT_TransvMercator_SouthOriented   = 27
 )
+*/
 
 // Compression types (defined in various places in the spec and supplements).
 const (
