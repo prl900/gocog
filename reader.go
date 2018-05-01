@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"io/ioutil"
 
@@ -50,13 +51,13 @@ type ImgDesc struct {
 	NewSubfileType     uint32
 	ImageWidth         uint32
 	ImageHeight        uint32
-	BitsPerSample      uint16
-	Compression        uint16
-	PhotometricInterpr uint16
-	SamplesPerPixel    uint16
 	TileWidth          uint32
 	TileHeight         uint32
-	SampleFormat       uint16
+	PhotometricInterpr uint16
+	Compression        uint16
+	SamplesPerPixel    uint16
+	BitsPerSample      []uint16
+	SampleFormat       []uint16
 	TileOffsets        []uint32
 	TileByteCounts     []uint32
 }
@@ -96,12 +97,12 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 		case cNewSubfileType:
 			if datatype != dtLong || count != 1 {
 				fmt.Println(datatype, count)
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("1unexpected value found on IFD")
 			}
 			imgDesc.NewSubfileType = d.bo.Uint32(ifd[i+8 : i+12])
 		case cImageWidth:
 			if count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("2unexpected value found on IFD")
 			}
 			switch datatype {
 			case dtShort:
@@ -109,11 +110,11 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.ImageWidth = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("3unexpected value found on IFD")
 			}
 		case cImageLength:
 			if count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("4unexpected value found on IFD")
 			}
 			switch datatype {
 			case dtShort:
@@ -121,36 +122,42 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.ImageHeight = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("5unexpected value found on IFD")
 			}
 		case cBitsPerSample:
-			if datatype != dtShort || count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+			if datatype != dtShort {
+				return 0, FormatError("6unexpected value found on IFD")
 			}
-			imgDesc.BitsPerSample = d.bo.Uint16(ifd[i+8 : i+10])
+			fmt.Println("BPS-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
+			fmt.Println("-------", count, d.bo.Uint16(ifd[i+10 : i+12]))
+			fmt.Println("-------", count, d.bo.Uint16(ifd[i+12 : i+14]))
+			fmt.Println("-------", count, d.bo.Uint16(ifd[i+14 : i+16]))
+			imgDesc.BitsPerSample = []uint16{d.bo.Uint16(ifd[i+8 : i+10])}
 		case cCompression:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("7unexpected value found on IFD")
 			}
 			imgDesc.Compression = d.bo.Uint16(ifd[i+8 : i+10])
 		case cPhotometricInterpr:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("8unexpected value found on IFD")
 			}
+			fmt.Println("Phot-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
 			imgDesc.PhotometricInterpr = d.bo.Uint16(ifd[i+8 : i+10])
 		case cSamplesPerPixel:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("9unexpected value found on IFD")
 			}
+			fmt.Println("SPP-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
 			imgDesc.SamplesPerPixel = d.bo.Uint16(ifd[i+8 : i+10])
 		case cSampleFormat:
-			if datatype != dtShort || count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+			if datatype != dtShort {
+				return 0, FormatError("10unexpected value found on IFD")
 			}
-			imgDesc.SampleFormat = d.bo.Uint16(ifd[i+8 : i+10])
+			imgDesc.SampleFormat = []uint16{d.bo.Uint16(ifd[i+8 : i+10])}
 		case cTileWidth:
 			if count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("11unexpected value found on IFD")
 			}
 			switch datatype {
 			case dtShort:
@@ -158,11 +165,11 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.TileWidth = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("12unexpected value found on IFD")
 			}
 		case cTileLength:
 			if count != 1 {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("13unexpected value found on IFD")
 			}
 			switch datatype {
 			case dtShort:
@@ -170,11 +177,11 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.TileHeight = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("14unexpected value found on IFD")
 			}
 		case cTileOffsets, cTileByteCounts:
 			if datatype != dtLong {
-				return 0, FormatError("unexpected value found on IFD")
+				return 0, FormatError("15unexpected value found on IFD")
 			}
 
 			var raw []byte
@@ -224,17 +231,22 @@ func newDecoder(r io.Reader) (decoder, error) {
 	return decoder{}, FormatError("malformed header")
 }
 
-func (d *decoder) ReadIFD() {
-
+func (d *decoder) ReadIFD() error {
+	var err error
 	p := make([]byte, 4)
-	if _, err := d.ra.ReadAt(p, 4); err != nil {
-		return
+	if _, err = d.ra.ReadAt(p, 4); err != nil {
+		return err
 	}
 	ifdOffset := int64(d.bo.Uint32(p[0:4]))
 
 	for ifdOffset != 0 {
-		ifdOffset, _ = d.ParseIFD(ifdOffset)
+		ifdOffset, err = d.ParseIFD(ifdOffset)
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // decode decodes the raw data of an image.
@@ -252,9 +264,9 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 
 	switch cfg.PhotometricInterpr {
 	case pBlackIsZero:
-		switch sampleFormat(cfg.SampleFormat) {
+		switch sampleFormat(cfg.SampleFormat[0]) {
 		case uintSample:
-			switch cfg.BitsPerSample {
+			switch cfg.BitsPerSample[0] {
 			case 8:
 				img := dst.(*scimage.GrayU8)
 				for y := ymin; y < rMaxY; y++ {
@@ -287,7 +299,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 				}
 			}
 		case sintSample:
-			switch cfg.BitsPerSample {
+			switch cfg.BitsPerSample[0] {
 			case 8:
 				img := dst.(*scimage.GrayS8)
 				for y := ymin; y < rMaxY; y++ {
@@ -329,16 +341,21 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 	return nil
 }
 
-func Decode(r io.Reader, level int) (img image.Image, err error) {
+func DecodeSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
 	d, err := newDecoder(r)
 	if err != nil {
-		return
+		return nil, err
 	}
-	d.ReadIFD()
+	err = d.ReadIFD()
+	if err != nil {
+		return nil, err
+	}
 
 	fmt.Println("AAAA", d.nameit)
 
 	cfg := d.nameit[level]
+
+	fmt.Println("AAAA", cfg.TileWidth, cfg.TileHeight, cfg.ImageWidth, cfg.ImageHeight)
 
 	blockPadding := false
 	blocksAcross := 1
@@ -361,7 +378,7 @@ func Decode(r io.Reader, level int) (img image.Image, err error) {
 		return nil, FormatError("inconsistent header")
 	}
 
-	switch cfg.BitsPerSample {
+	switch cfg.BitsPerSample[0] {
 	case 0:
 		return nil, FormatError("BitsPerSample must not be 0")
 	case 1, 8, 16:
@@ -370,12 +387,16 @@ func Decode(r io.Reader, level int) (img image.Image, err error) {
 		return nil, UnsupportedError(fmt.Sprintf("BitsPerSample of %v", cfg.BitsPerSample))
 	}
 
-	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
+	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight)).Intersect(rect)
+	if imgRect.Empty() {
+		return nil, fmt.Errorf("The rectangle provided does not is outside the image")
+	}
+
 	switch cfg.PhotometricInterpr {
 	case pBlackIsZero:
-		switch sampleFormat(cfg.SampleFormat) {
+		switch sampleFormat(cfg.SampleFormat[0]) {
 		case uintSample:
-			switch cfg.BitsPerSample {
+			switch cfg.BitsPerSample[0] {
 			case 8:
 				img = scimage.NewGrayU8(imgRect, 0, 255)
 			case 16:
@@ -384,7 +405,7 @@ func Decode(r io.Reader, level int) (img image.Image, err error) {
 				return nil, FormatError("image data type not implemented")
 			}
 		case sintSample:
-			switch cfg.BitsPerSample {
+			switch cfg.BitsPerSample[0] {
 			case 8:
 				img = scimage.NewGrayS8(imgRect, -128, 127)
 			case 16:
@@ -454,19 +475,164 @@ func Decode(r io.Reader, level int) (img image.Image, err error) {
 	return
 }
 
-/*
-// DecodeConfig returns the color model and dimensions of a TIFF image without
-// decoding the entire image.
-func DecodeConfig(r io.Reader) (image.Config, error) {
+func DecodeLevel(r io.Reader, level int) (img image.Image, err error) {
+	d, err := newDecoder(r)
+	if err != nil {
+		return nil, err
+	}
+	err = d.ReadIFD()
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("AAAA", d.nameit)
+
+	cfg := d.nameit[level]
+
+	fmt.Println("AAAA", cfg.TileWidth, cfg.TileHeight, cfg.ImageWidth, cfg.ImageHeight)
+
+	blockPadding := false
+	blocksAcross := 1
+	blocksDown := 1
+
+	if cfg.ImageWidth == 0 || cfg.ImageHeight == 0 {
+		return nil, FormatError("image data type not implemented")
+	}
+
+	if cfg.TileWidth != 0 {
+		blockPadding = true
+		blocksAcross = int((cfg.ImageWidth + cfg.TileWidth - 1) / cfg.TileWidth)
+		if cfg.TileHeight != 0 {
+			blocksDown = int((cfg.ImageHeight + cfg.TileHeight - 1) / cfg.TileHeight)
+		}
+	}
+
+	// Check if we have the right number of strips/tiles, offsets and counts.
+	if n := blocksAcross * blocksDown; len(cfg.TileOffsets) < n || len(cfg.TileByteCounts) < n {
+		return nil, FormatError("inconsistent header")
+	}
+
+	switch cfg.BitsPerSample[0] {
+	case 0:
+		return nil, FormatError("BitsPerSample must not be 0")
+	case 1, 8, 16:
+		// Nothing to do, these are accepted by this implementation.
+	default:
+		return nil, UnsupportedError(fmt.Sprintf("BitsPerSample of %v", cfg.BitsPerSample))
+	}
+
+	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
+	switch cfg.PhotometricInterpr {
+	case pBlackIsZero:
+		switch sampleFormat(cfg.SampleFormat[0]) {
+		case uintSample:
+			switch cfg.BitsPerSample[0] {
+			case 8:
+				img = scimage.NewGrayU8(imgRect, 0, 255)
+			case 16:
+				img = scimage.NewGrayU16(imgRect, 0, 65535)
+			default:
+				return nil, FormatError("image data type not implemented")
+			}
+		case sintSample:
+			switch cfg.BitsPerSample[0] {
+			case 8:
+				img = scimage.NewGrayS8(imgRect, -128, 127)
+			case 16:
+				img = scimage.NewGrayS16(imgRect, 0, 32767)
+			default:
+				return nil, FormatError("image data type not implemented")
+			}
+		default:
+			return nil, FormatError("image data type not implemented")
+		}
+	default:
+		return nil, FormatError("color model not implemented")
+	}
+
+	for i := 0; i < blocksAcross; i++ {
+		blkW := int(cfg.TileWidth)
+		if !blockPadding && i == blocksAcross-1 && cfg.ImageWidth%cfg.TileWidth != 0 {
+			blkW = int(cfg.ImageWidth % cfg.TileWidth)
+		}
+		for j := 0; j < blocksDown; j++ {
+			blkH := int(cfg.TileHeight)
+			if !blockPadding && j == blocksDown-1 && cfg.ImageHeight%cfg.TileHeight != 0 {
+				blkH = int(cfg.ImageHeight % cfg.TileHeight)
+			}
+			offset := int64(cfg.TileOffsets[j*blocksAcross+i])
+			n := int64(cfg.TileByteCounts[j*blocksAcross+i])
+			switch cfg.Compression {
+
+			// According to the spec, Compression does not have a default value,
+			// but some tools interpret a missing Compression value as none so we do
+			// the same.
+			case cNone, 0:
+				if b, ok := d.ra.(*buffer); ok {
+					d.buf, err = b.Slice(int(offset), int(n))
+				} else {
+					d.buf = make([]byte, n)
+					_, err = d.ra.ReadAt(d.buf, offset)
+				}
+			case cDeflate, cDeflateOld:
+				var r io.ReadCloser
+				r, err = zlib.NewReader(io.NewSectionReader(d.ra, offset, n))
+				if err != nil {
+					return nil, err
+				}
+				d.buf, err = ioutil.ReadAll(r)
+				r.Close()
+			case cPackBits:
+				d.buf, err = unpackBits(io.NewSectionReader(d.ra, offset, n))
+			default:
+				err = UnsupportedError(fmt.Sprintf("compression value %d", cfg.Compression))
+			}
+			if err != nil {
+				return nil, err
+			}
+
+			xmin := i * int(cfg.TileWidth)
+			ymin := j * int(cfg.TileHeight)
+			xmax := xmin + blkW
+			ymax := ymin + blkH
+
+			err = d.decode(img, level, xmin, ymin, xmax, ymax)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return
+}
+
+func Decode(r io.Reader) (img image.Image, err error) {
+	return DecodeLevel(r, 0)
+}
+
+func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 	d, err := newDecoder(r)
 	if err != nil {
 		return image.Config{}, err
 	}
-	return d.config, nil
+	err = d.ReadIFD()
+	if err != nil {
+		return image.Config{}, err
+	}
+
+	cfg := d.nameit[level]
+	if err != nil {
+	}
+	// TODO get right colour model
+	return image.Config{color.GrayModel, int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
+}
+
+// DecodeConfig returns the color model and dimensions of a TIFF image without
+// decoding the entire image.
+func DecodeConfig(r io.Reader) (image.Config, error) {
+	return DecodeConfigLevel(r, 0)
 }
 
 func init() {
 	image.RegisterFormat("cog", leHeader, Decode, DecodeConfig)
 	image.RegisterFormat("cog", beHeader, Decode, DecodeConfig)
 }
-*/
