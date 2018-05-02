@@ -63,12 +63,10 @@ type ImgDesc struct {
 }
 
 type decoder struct {
-	buf    []byte
-	ra     io.ReaderAt
-	bo     binary.ByteOrder
-	nameit []ImgDesc
-
-	//off int
+	buf []byte
+	ra  io.ReaderAt
+	bo  binary.ByteOrder
+	dsc []ImgDesc
 }
 
 // parseIFD decides whether the IFD entry in p is "interesting" and
@@ -203,7 +201,7 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 			}
 		}
 	}
-	d.nameit = append(d.nameit, imgDesc)
+	d.dsc = append(d.dsc, imgDesc)
 
 	nextIFDOffset := ifdOffset + int64(2) + int64(numItems*12)
 	if _, err := d.ra.ReadAt(p[0:4], nextIFDOffset); err != nil {
@@ -231,7 +229,7 @@ func newDecoder(r io.Reader) (decoder, error) {
 	return decoder{}, FormatError("malformed header")
 }
 
-func (d *decoder) ReadIFD() error {
+func (d *decoder) readIFD() error {
 	var err error
 	p := make([]byte, 4)
 	if _, err = d.ra.ReadAt(p, 4); err != nil {
@@ -252,7 +250,7 @@ func (d *decoder) ReadIFD() error {
 // decode decodes the raw data of an image.
 // It reads from d.buf and writes the strip or tile into dst.
 func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) error {
-	cfg := d.nameit[level]
+	cfg := d.dsc[level]
 	off := 0
 
 	rMaxX := minInt(xmax, dst.Bounds().Max.X)
@@ -341,19 +339,19 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 	return nil
 }
 
-func DecodeSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
+func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
 	d, err := newDecoder(r)
 	if err != nil {
 		return nil, err
 	}
-	err = d.ReadIFD()
+	err = d.readIFD()
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("AAAA", d.nameit)
+	fmt.Println("AAAA", d.dsc)
 
-	cfg := d.nameit[level]
+	cfg := d.dsc[level]
 
 	fmt.Println("AAAA", cfg.TileWidth, cfg.TileHeight, cfg.ImageWidth, cfg.ImageHeight)
 
@@ -480,129 +478,15 @@ func DecodeLevel(r io.Reader, level int) (img image.Image, err error) {
 	if err != nil {
 		return nil, err
 	}
-	err = d.ReadIFD()
+	err = d.readIFD()
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("AAAA", d.nameit)
+	cfg := d.dsc[level]
+	rect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
 
-	cfg := d.nameit[level]
-
-	fmt.Println("AAAA", cfg.TileWidth, cfg.TileHeight, cfg.ImageWidth, cfg.ImageHeight)
-
-	blockPadding := false
-	blocksAcross := 1
-	blocksDown := 1
-
-	if cfg.ImageWidth == 0 || cfg.ImageHeight == 0 {
-		return nil, FormatError("image data type not implemented")
-	}
-
-	if cfg.TileWidth != 0 {
-		blockPadding = true
-		blocksAcross = int((cfg.ImageWidth + cfg.TileWidth - 1) / cfg.TileWidth)
-		if cfg.TileHeight != 0 {
-			blocksDown = int((cfg.ImageHeight + cfg.TileHeight - 1) / cfg.TileHeight)
-		}
-	}
-
-	// Check if we have the right number of strips/tiles, offsets and counts.
-	if n := blocksAcross * blocksDown; len(cfg.TileOffsets) < n || len(cfg.TileByteCounts) < n {
-		return nil, FormatError("inconsistent header")
-	}
-
-	switch cfg.BitsPerSample[0] {
-	case 0:
-		return nil, FormatError("BitsPerSample must not be 0")
-	case 1, 8, 16:
-		// Nothing to do, these are accepted by this implementation.
-	default:
-		return nil, UnsupportedError(fmt.Sprintf("BitsPerSample of %v", cfg.BitsPerSample))
-	}
-
-	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
-	switch cfg.PhotometricInterpr {
-	case pBlackIsZero:
-		switch sampleFormat(cfg.SampleFormat[0]) {
-		case uintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img = scimage.NewGrayU8(imgRect, 0, 255)
-			case 16:
-				img = scimage.NewGrayU16(imgRect, 0, 65535)
-			default:
-				return nil, FormatError("image data type not implemented")
-			}
-		case sintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img = scimage.NewGrayS8(imgRect, -128, 127)
-			case 16:
-				img = scimage.NewGrayS16(imgRect, 0, 32767)
-			default:
-				return nil, FormatError("image data type not implemented")
-			}
-		default:
-			return nil, FormatError("image data type not implemented")
-		}
-	default:
-		return nil, FormatError("color model not implemented")
-	}
-
-	for i := 0; i < blocksAcross; i++ {
-		blkW := int(cfg.TileWidth)
-		if !blockPadding && i == blocksAcross-1 && cfg.ImageWidth%cfg.TileWidth != 0 {
-			blkW = int(cfg.ImageWidth % cfg.TileWidth)
-		}
-		for j := 0; j < blocksDown; j++ {
-			blkH := int(cfg.TileHeight)
-			if !blockPadding && j == blocksDown-1 && cfg.ImageHeight%cfg.TileHeight != 0 {
-				blkH = int(cfg.ImageHeight % cfg.TileHeight)
-			}
-			offset := int64(cfg.TileOffsets[j*blocksAcross+i])
-			n := int64(cfg.TileByteCounts[j*blocksAcross+i])
-			switch cfg.Compression {
-
-			// According to the spec, Compression does not have a default value,
-			// but some tools interpret a missing Compression value as none so we do
-			// the same.
-			case cNone, 0:
-				if b, ok := d.ra.(*buffer); ok {
-					d.buf, err = b.Slice(int(offset), int(n))
-				} else {
-					d.buf = make([]byte, n)
-					_, err = d.ra.ReadAt(d.buf, offset)
-				}
-			case cDeflate, cDeflateOld:
-				var r io.ReadCloser
-				r, err = zlib.NewReader(io.NewSectionReader(d.ra, offset, n))
-				if err != nil {
-					return nil, err
-				}
-				d.buf, err = ioutil.ReadAll(r)
-				r.Close()
-			case cPackBits:
-				d.buf, err = unpackBits(io.NewSectionReader(d.ra, offset, n))
-			default:
-				err = UnsupportedError(fmt.Sprintf("compression value %d", cfg.Compression))
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			xmin := i * int(cfg.TileWidth)
-			ymin := j * int(cfg.TileHeight)
-			xmax := xmin + blkW
-			ymax := ymin + blkH
-
-			err = d.decode(img, level, xmin, ymin, xmax, ymax)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	return
+	return DecodeLevelSubImage(r, level, rect)
 }
 
 func Decode(r io.Reader) (img image.Image, err error) {
@@ -614,12 +498,12 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 	if err != nil {
 		return image.Config{}, err
 	}
-	err = d.ReadIFD()
+	err = d.readIFD()
 	if err != nil {
 		return image.Config{}, err
 	}
 
-	cfg := d.nameit[level]
+	cfg := d.dsc[level]
 	if err != nil {
 	}
 	// TODO get right colour model
