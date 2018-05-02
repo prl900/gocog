@@ -69,10 +69,26 @@ type decoder struct {
 	dsc []ImgDesc
 }
 
+func newDecoder(r io.Reader) (decoder, error) {
+	ra := newReaderAt(r)
+	p := make([]byte, 8)
+	if _, err := ra.ReadAt(p, 0); err != nil {
+		return decoder{}, FormatError("malformed header")
+	}
+	switch string(p[0:4]) {
+	case leHeader:
+		return decoder{nil, ra, binary.LittleEndian, []ImgDesc{}}, nil
+	case beHeader:
+		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}}, nil
+	}
+
+	return decoder{}, FormatError("malformed header")
+}
+
 // parseIFD decides whether the IFD entry in p is "interesting" and
 // stows away the data in the decoder. It returns the tag number of the
 // entry and an error, if any.
-func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
+func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 
 	p := make([]byte, 8)
 	if _, err := d.ra.ReadAt(p[0:2], ifdOffset); err != nil {
@@ -212,23 +228,6 @@ func (d *decoder) ParseIFD(ifdOffset int64) (int64, error) {
 	return ifdOffset, nil
 }
 
-func newDecoder(r io.Reader) (decoder, error) {
-	ra := newReaderAt(r)
-
-	p := make([]byte, 8)
-	if _, err := ra.ReadAt(p, 0); err != nil {
-		return decoder{}, FormatError("malformed header")
-	}
-	switch string(p[0:4]) {
-	case leHeader:
-		return decoder{nil, ra, binary.LittleEndian, []ImgDesc{}}, nil
-	case beHeader:
-		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}}, nil
-	}
-
-	return decoder{}, FormatError("malformed header")
-}
-
 func (d *decoder) readIFD() error {
 	var err error
 	p := make([]byte, 4)
@@ -238,7 +237,7 @@ func (d *decoder) readIFD() error {
 	ifdOffset := int64(d.bo.Uint32(p[0:4]))
 
 	for ifdOffset != 0 {
-		ifdOffset, err = d.ParseIFD(ifdOffset)
+		ifdOffset, err = d.parseIFD(ifdOffset)
 		if err != nil {
 			return err
 		}
@@ -247,10 +246,10 @@ func (d *decoder) readIFD() error {
 	return nil
 }
 
-func (d *decoder) getColorModel(level int) color.Model {
-
+func (d *decoder) colorModel(level int) color.Model {
 	cfg := d.dsc[level]
 
+	// TODO get range in color modes dynamically from tiff file metadata?
 	switch cfg.PhotometricInterpr {
 	case pBlackIsZero:
 		switch sampleFormat(cfg.SampleFormat[0]) {
@@ -368,7 +367,7 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 	blocksDown := 1
 
 	if cfg.ImageWidth == 0 || cfg.ImageHeight == 0 {
-		return nil, FormatError("image data type not implemented")
+		return nil, FormatError("unexpected image dimensions")
 	}
 
 	if cfg.TileWidth != 0 {
@@ -387,7 +386,7 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 	switch cfg.BitsPerSample[0] {
 	case 0:
 		return nil, FormatError("BitsPerSample must not be 0")
-	case 1, 8, 16:
+	case 8, 16:
 		// Nothing to do, these are accepted by this implementation.
 	default:
 		return nil, UnsupportedError(fmt.Sprintf("BitsPerSample of %v", cfg.BitsPerSample))
@@ -398,7 +397,7 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 		return nil, fmt.Errorf("The rectangle provided does not intersect the image")
 	}
 
-	switch v := d.getColorModel(level).(type) {
+	switch v := d.colorModel(level).(type) {
 	case scicolor.GrayU8Model:
 		img = scimage.NewGrayU8(imgRect, v.Min, v.Max)
 	case scicolor.GrayU16Model:
@@ -411,12 +410,12 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 		return nil, FormatError("image data type not implemented")
 	}
 
-	for i := 0; i < blocksAcross; i++ {
+	for i := imgRect.Bounds().Min.X/int(cfg.TileWidth); i <= imgRect.Bounds().Max.X/int(cfg.TileWidth); i++ {
 		blkW := int(cfg.TileWidth)
 		if !blockPadding && i == blocksAcross-1 && cfg.ImageWidth%cfg.TileWidth != 0 {
 			blkW = int(cfg.ImageWidth % cfg.TileWidth)
 		}
-		for j := 0; j < blocksDown; j++ {
+		for j := imgRect.Bounds().Min.Y/int(cfg.TileWidth); j <= imgRect.Bounds().Max.Y/int(cfg.TileWidth); j++ {
 			blkH := int(cfg.TileHeight)
 			if !blockPadding && j == blocksDown-1 && cfg.ImageHeight%cfg.TileHeight != 0 {
 				blkH = int(cfg.ImageHeight % cfg.TileHeight)
@@ -498,10 +497,7 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 
 	cfg := d.dsc[level]
 
-	// TODO get right colour model
-	// TODO color model should be calculated once and saved into ImgDesc struct?
-	// TODO maybe a better alternative is implementing d.getColorModel() method?
-	return image.Config{color.GrayModel, int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
+	return image.Config{d.colorModel(level), int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
 }
 
 // DecodeConfig returns the color model and dimensions of a TIFF image without
