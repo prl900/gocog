@@ -247,6 +247,33 @@ func (d *decoder) readIFD() error {
 	return nil
 }
 
+func (d *decoder) getColorModel(level int) color.Model {
+
+	cfg := d.dsc[level]
+
+	switch cfg.PhotometricInterpr {
+	case pBlackIsZero:
+		switch sampleFormat(cfg.SampleFormat[0]) {
+		case uintSample:
+			switch cfg.BitsPerSample[0] {
+			case 8:
+				return scicolor.GrayU8Model{0, 255}
+			case 16:
+				return scicolor.GrayU16Model{0, 65535}
+			}
+		case sintSample:
+			switch cfg.BitsPerSample[0] {
+			case 8:
+				return scicolor.GrayS8Model{-128, 127}
+			case 16:
+				return scicolor.GrayS16Model{-32768, 32767}
+			}
+		}
+	}
+
+	return nil
+}
+
 // decode decodes the raw data of an image.
 // It reads from d.buf and writes the strip or tile into dst.
 func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) error {
@@ -260,80 +287,65 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 		return FormatError("image data type not implemented")
 	}
 
-	switch cfg.PhotometricInterpr {
-	case pBlackIsZero:
-		switch sampleFormat(cfg.SampleFormat[0]) {
-		case uintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img := dst.(*scimage.GrayU8)
-				for y := ymin; y < rMaxY; y++ {
-					for x := xmin; x < rMaxX; x++ {
-						if off+1 > len(d.buf) {
-							return errNoPixels
-						}
-						v := uint8(d.buf[off+0])
-						off++
-						img.SetGrayU8(x, y, scicolor.GrayU8{uint8(v), img.Min, img.Max})
-					}
-					if rMaxX == img.Bounds().Max.X {
-						off += xmax - img.Bounds().Max.X
-					}
+	switch img := dst.(type) {
+	case *scimage.GrayU8:
+		for y := ymin; y < rMaxY; y++ {
+			for x := xmin; x < rMaxX; x++ {
+				if off+1 > len(d.buf) {
+					return errNoPixels
 				}
-			case 16:
-				img := dst.(*scimage.GrayU16)
-				for y := ymin; y < rMaxY; y++ {
-					for x := xmin; x < rMaxX; x++ {
-						if off+2 > len(d.buf) {
-							return errNoPixels
-						}
-						v := uint16(d.buf[off+0])<<8 | uint16(d.buf[off+1])
-						off += 2
-						img.SetGrayU16(x, y, scicolor.GrayU16{v, img.Min, img.Max})
-					}
-					if rMaxX == img.Bounds().Max.X {
-						off += 2 * (xmax - img.Bounds().Max.X)
-					}
-				}
+				v := uint8(d.buf[off+0])
+				off++
+				img.SetGrayU8(x, y, scicolor.GrayU8{uint8(v), img.Min, img.Max})
 			}
-		case sintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img := dst.(*scimage.GrayS8)
-				for y := ymin; y < rMaxY; y++ {
-					for x := xmin; x < rMaxX; x++ {
-						if off+1 > len(d.buf) {
-							return errNoPixels
-						}
-						v := int8(d.buf[off+0])
-						off++
-						img.SetGrayS8(x, y, scicolor.GrayS8{int8(v), img.Min, img.Max})
-					}
-					if rMaxX == img.Bounds().Max.X {
-						off += xmax - img.Bounds().Max.X
-					}
-				}
-			case 16:
-				img := dst.(*scimage.GrayS16)
-				for y := ymin; y < rMaxY; y++ {
-					for x := xmin; x < rMaxX; x++ {
-						if off+2 > len(d.buf) {
-							return errNoPixels
-						}
-						v := int16(d.buf[off+0])<<8 | int16(d.buf[off+1])
-						off += 2
-						img.SetGrayS16(x, y, scicolor.GrayS16{v, img.Min, img.Max})
-					}
-					if rMaxX == img.Bounds().Max.X {
-						off += 2 * (xmax - img.Bounds().Max.X)
-					}
-				}
+			if rMaxX == img.Bounds().Max.X {
+				off += xmax - img.Bounds().Max.X
 			}
 		}
-
+	case *scimage.GrayU16:
+		for y := ymin; y < rMaxY; y++ {
+			for x := xmin; x < rMaxX; x++ {
+				if off+2 > len(d.buf) {
+					return errNoPixels
+				}
+				v := uint16(d.buf[off+0])<<8 | uint16(d.buf[off+1])
+				off += 2
+				img.SetGrayU16(x, y, scicolor.GrayU16{v, img.Min, img.Max})
+			}
+			if rMaxX == img.Bounds().Max.X {
+				off += 2 * (xmax - img.Bounds().Max.X)
+			}
+		}
+	case *scimage.GrayS8:
+		for y := ymin; y < rMaxY; y++ {
+			for x := xmin; x < rMaxX; x++ {
+				if off+1 > len(d.buf) {
+					return errNoPixels
+				}
+				v := int8(d.buf[off+0])
+				off++
+				img.SetGrayS8(x, y, scicolor.GrayS8{int8(v), img.Min, img.Max})
+			}
+			if rMaxX == img.Bounds().Max.X {
+				off += xmax - img.Bounds().Max.X
+			}
+		}
+	case *scimage.GrayS16:
+		for y := ymin; y < rMaxY; y++ {
+			for x := xmin; x < rMaxX; x++ {
+				if off+2 > len(d.buf) {
+					return errNoPixels
+				}
+				v := int16(d.buf[off+0])<<8 | int16(d.buf[off+1])
+				off += 2
+				img.SetGrayS16(x, y, scicolor.GrayS16{v, img.Min, img.Max})
+			}
+			if rMaxX == img.Bounds().Max.X {
+				off += 2 * (xmax - img.Bounds().Max.X)
+			}
+		}
 	default:
 		return FormatError("malformed header")
-
 	}
 
 	return nil
@@ -349,11 +361,7 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 		return nil, err
 	}
 
-	fmt.Println("AAAA", d.dsc)
-
 	cfg := d.dsc[level]
-
-	fmt.Println("AAAA", cfg.TileWidth, cfg.TileHeight, cfg.ImageWidth, cfg.ImageHeight)
 
 	blockPadding := false
 	blocksAcross := 1
@@ -387,35 +395,20 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 
 	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight)).Intersect(rect)
 	if imgRect.Empty() {
-		return nil, fmt.Errorf("The rectangle provided does not is outside the image")
+		return nil, fmt.Errorf("The rectangle provided does not intersect the image")
 	}
 
-	switch cfg.PhotometricInterpr {
-	case pBlackIsZero:
-		switch sampleFormat(cfg.SampleFormat[0]) {
-		case uintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img = scimage.NewGrayU8(imgRect, 0, 255)
-			case 16:
-				img = scimage.NewGrayU16(imgRect, 0, 65535)
-			default:
-				return nil, FormatError("image data type not implemented")
-			}
-		case sintSample:
-			switch cfg.BitsPerSample[0] {
-			case 8:
-				img = scimage.NewGrayS8(imgRect, -128, 127)
-			case 16:
-				img = scimage.NewGrayS16(imgRect, 0, 32767)
-			default:
-				return nil, FormatError("image data type not implemented")
-			}
-		default:
-			return nil, FormatError("image data type not implemented")
-		}
+	switch v := d.getColorModel(level).(type) {
+	case scicolor.GrayU8Model:
+		img = scimage.NewGrayU8(imgRect, v.Min, v.Max)
+	case scicolor.GrayU16Model:
+		img = scimage.NewGrayU16(imgRect, v.Min, v.Max)
+	case scicolor.GrayS8Model:
+		img = scimage.NewGrayS8(imgRect, v.Min, v.Max)
+	case scicolor.GrayS16Model:
+		img = scimage.NewGrayS16(imgRect, v.Min, v.Max)
 	default:
-		return nil, FormatError("color model not implemented")
+		return nil, FormatError("image data type not implemented")
 	}
 
 	for i := 0; i < blocksAcross; i++ {
@@ -506,6 +499,8 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 	cfg := d.dsc[level]
 
 	// TODO get right colour model
+	// TODO color model should be calculated once and saved into ImgDesc struct?
+	// TODO maybe a better alternative is implementing d.getColorModel() method?
 	return image.Config{color.GrayModel, int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
 }
 
