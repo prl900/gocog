@@ -504,8 +504,7 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 	}
 
 	cfg := d.dsc[level]
-	if err != nil {
-	}
+
 	// TODO get right colour model
 	return image.Config{color.GrayModel, int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
 }
