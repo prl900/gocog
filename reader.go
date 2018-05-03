@@ -502,7 +502,7 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 
 	cfg := d.dsc[level]
 
-	return image.Config{d.colorModel(level), int(cfg.ImageWidth), int(cfg.ImageHeight)}, nil
+	return image.Config{ColorModel: d.colorModel(level), Width: int(cfg.ImageWidth), Height: int(cfg.ImageHeight)}, nil
 }
 
 // DecodeConfig returns the color model and dimensions of a TIFF image without
