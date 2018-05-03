@@ -16,8 +16,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/prl900/scimage"
-	"github.com/prl900/scimage/scicolor"
+	"github.com/terrascope/scimage"
+	"github.com/terrascope/scimage/scicolor"
 )
 
 // A FormatError reports that the input is not a valid TIFF image.
