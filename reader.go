@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/terrascope/gocog/lzw"
 	"github.com/terrascope/scimage"
 	"github.com/terrascope/scimage/scicolor"
 )
@@ -434,6 +435,10 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 					d.buf = make([]byte, n)
 					_, err = d.ra.ReadAt(d.buf, offset)
 				}
+			case cLZW:
+				r := lzw.NewReader(io.NewSectionReader(d.r, offset, n), lzw.MSB, 8)
+				d.buf, err = ioutil.ReadAll(r)
+				r.Close()
 			case cDeflate, cDeflateOld:
 				var r io.ReadCloser
 				r, err = zlib.NewReader(io.NewSectionReader(d.ra, offset, n))
