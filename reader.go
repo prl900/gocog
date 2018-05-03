@@ -351,16 +351,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 	return nil
 }
 
-func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
-	d, err := newDecoder(r)
-	if err != nil {
-		return nil, err
-	}
-	err = d.readIFD()
-	if err != nil {
-		return nil, err
-	}
-
+func decodeLevelSubImage(d decoder, level int, rect image.Rectangle) (img image.Image, err error) {
 	cfg := d.dsc[level]
 
 	blockPadding := false
@@ -469,6 +460,18 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 	}
 	return
 }
+func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
+	d, err := newDecoder(r)
+	if err != nil {
+		return nil, err
+	}
+	err = d.readIFD()
+	if err != nil {
+		return nil, err
+	}
+
+	return decodeLevelSubImage(d, level, rect)
+}
 
 func DecodeLevel(r io.Reader, level int) (img image.Image, err error) {
 	d, err := newDecoder(r)
@@ -483,11 +486,23 @@ func DecodeLevel(r io.Reader, level int) (img image.Image, err error) {
 	cfg := d.dsc[level]
 	rect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
 
-	return DecodeLevelSubImage(r, level, rect)
+	return decodeLevelSubImage(d, level, rect)
 }
 
 func Decode(r io.Reader) (img image.Image, err error) {
-	return DecodeLevel(r, 0)
+	d, err := newDecoder(r)
+	if err != nil {
+		return nil, err
+	}
+	err = d.readIFD()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := d.dsc[0]
+	rect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
+
+	return decodeLevelSubImage(d, 0, rect)
 }
 
 func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
