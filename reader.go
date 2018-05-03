@@ -436,7 +436,7 @@ func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img imag
 					_, err = d.ra.ReadAt(d.buf, offset)
 				}
 			case cLZW:
-				r := lzw.NewReader(io.NewSectionReader(d.r, offset, n), lzw.MSB, 8)
+				r := lzw.NewReader(io.NewSectionReader(d.ra, offset, n), lzw.MSB, 8)
 				d.buf, err = ioutil.ReadAll(r)
 				r.Close()
 			case cDeflate, cDeflateOld:
