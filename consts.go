@@ -59,6 +59,26 @@ const (
 
 
 
+const (
+	// GeoTIFF tags
+	tModelPixelScale     = 33550
+	tModelTiepoint       = 33922
+	tModelTransformation = 34264
+	tGeoKeyDirectory     = 34735
+
+	//This tag is used to store all of the DOUBLE valued GeoKeys, referenced by the
+	//GeoKeyDirectoryTag. The meaning of any value of this double array is determined
+	//from the GeoKeyDirectoryTag reference pointing to it. FLOAT values should first
+	//be converted to DOUBLE and stored here.
+	GeoDoubleParamsTag = 34736 // Type = DOUBLE (IEEE Double precision) N = variable
+
+	//This tag is used to store all of the ASCII valued GeoKeys, referenced by the
+	//GeoKeyDirectoryTag. Since keys use offsets into tags, any special comments
+	//may be placed at the beginning of this tag. For the most part, the only keys
+	//that are ASCII valued are "Citation" keys, giving documentation and references
+	//for obscure projections, datums, etc.
+	GeoAsciiParamsTag = 34737 // Type = ASCII N = variable
+)
 
 
 /*
@@ -92,18 +112,11 @@ const (
 	tExtraSamples = 338
 	tSampleFormat = 339
 
-	// GeoTIFF tags
-	tModelPixelScale     = 33550
-	tModelTiepoint       = 33922
-	tModelTransformation = 34264
-	tGeoKeyDirectory     = 34735
-	//tModel2              = 34736
-	//tModel3              = 34737
-
 	// GDAL tags
 	tGDALMetadata = 42112
 	tGDALNoData   = 42113
 )
+*/
 
 // Key ID Summary
 const (
@@ -153,8 +166,10 @@ const (
 	ProjScaleAtCenterGeoKey        = 3093 // ratio
 	ProjAzimuthAngleGeoKey         = 3094 // GeogAzimuthUnit
 	ProjStraightVertPoleLongGeoKey = 3095 // GeogAngularUnit
+
 )
 
+/*
 const (
 	CT_TransverseMercator             = 1
 	CT_TransvMercator_Modified_Alaska = 2

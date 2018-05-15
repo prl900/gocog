@@ -19,6 +19,7 @@ import (
 	"github.com/terrascope/gocog/lzw"
 	"github.com/terrascope/scimage"
 	"github.com/terrascope/scimage/scicolor"
+	"math"
 )
 
 // A FormatError reports that the input is not a valid TIFF image.
@@ -74,7 +75,7 @@ func newDecoder(r io.Reader) (decoder, error) {
 	ra := newReaderAt(r)
 	p := make([]byte, 8)
 	if _, err := ra.ReadAt(p, 0); err != nil {
-		return decoder{}, FormatError("malformed header")
+		return decoder{}, FormatError("malformed header 1")
 	}
 	switch string(p[0:4]) {
 	case leHeader:
@@ -83,7 +84,7 @@ func newDecoder(r io.Reader) (decoder, error) {
 		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}}, nil
 	}
 
-	return decoder{}, FormatError("malformed header")
+	return decoder{}, FormatError("malformed header 2")
 }
 
 // parseIFD decides whether the IFD entry in p is "interesting" and
@@ -101,6 +102,10 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	if _, err := d.ra.ReadAt(ifd, ifdOffset+2); err != nil {
 		return 0, FormatError("error reading IFD")
 	}
+	var kEntries []KeyEntry
+	var dParams []float64
+	var aParams string
+
 	imgDesc := ImgDesc{}
 	for i := 0; i < len(ifd); i += ifdLen {
 
@@ -216,8 +221,66 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			} else {
 				imgDesc.TileByteCounts = data
 			}
+		case GeoDoubleParamsTag:
+			if datatype != dtFloat64 {
+				return 0, FormatError("16.1unexpected value found on IFD")
+			}
+			var raw []byte
+			// The IFD contains a pointer to the real value.
+			raw = make([]byte, int(count)*8)
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+
+			dParams = make([]float64, count)
+			for i := uint32(0); i < count; i++ {
+				dParams[i] = math.Float64frombits(d.bo.Uint64(raw[8*i : 8*(i+1)]))
+			}
+		case GeoAsciiParamsTag:
+			if datatype != dtASCII {
+				return 0, FormatError("16.2unexpected value found on IFD")
+			}
+			var raw []byte
+			// The IFD contains a pointer to the real value.
+			raw = make([]byte, int(count)*4)
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+			aParams = string(raw)
+		case tGeoKeyDirectory:
+			if datatype != dtShort || count < 4 {
+				return 0, FormatError("16unexpected value found on IFD")
+			}
+			var raw []byte
+			// The IFD contains a pointer to the real value.
+			raw = make([]byte, int(count)*2)
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+
+			data := make([]uint16, count)
+			for i := uint32(0); i < count; i++ {
+				data[i] = d.bo.Uint16(raw[2*i : 2*(i+1)])
+			}
+			fmt.Println("tGeoKeyDirectory tag:", tag, count, data)
+
+			keyDirVersion := data[0]
+			if keyDirVersion != 1 {
+				return 0, FormatError("16unexpected Key Directory Version value found in GeoKeyDirectory tag")
+			}
+			numKeys := int(data[3])
+			fmt.Println("numKeys", numKeys)
+
+			kEntries = make([]KeyEntry, numKeys)
+			for i := 0; i<numKeys; i++ {
+				kEntries[i].KeyID = data[4*(i+1)]
+				kEntries[i].TIFFTagLocation = data[4*(i+1)+1]
+				kEntries[i].Count = data[4*(i+1)+2]
+				kEntries[i].ValueOffset = data[4*(i+1)+3]
+			}
+		case tModelPixelScale, tModelTiepoint, tModelTransformation:
+			fmt.Println("GeoTIFF tag:", tag)
+		default:
+			fmt.Println("Non captured tag:", tag)
+
 		}
 	}
+	geo := parseGeoKeyDirectory(kEntries, dParams, aParams)
+	fmt.Println(geo)
 	d.dsc = append(d.dsc, imgDesc)
 
 	nextIFDOffset := ifdOffset + int64(2) + int64(numItems*12)
