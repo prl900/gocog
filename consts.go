@@ -50,6 +50,8 @@ const (
 	cPhotometricInterpr  = 262
 	cSamplesPerPixel     = 277
 
+	cPredictor    = 317
+
 	cTileWidth           = 322
 	cTileLength          = 323
 	cTileOffsets         = 324

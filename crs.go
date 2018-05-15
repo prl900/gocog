@@ -30,22 +30,32 @@ const (
 
 	//Section 6.3.2.1 codes
 	GCS_WGS84 GeographicType = "WGS_84"
+	UserDefinedGeogType GeographicType = "user-defined"
 
 	//Section 6.3.2.2 codes
 	DatumWGS84 GeogGeodeticDatum = "WGS_84"
+	UserDefinedGeodDatum GeogGeodeticDatum = "user-defined"
 
 	//Section 6.3.2.3 codes
 	EllipseWGS84 GeogEllipsoid = "WGS_84"
 	EllipseSphere GeogEllipsoid = "Sphere"
+	UserDefinedGeogEllipsoid GeogEllipsoid = "user-defined"
+
+	//Section 6.3.3.2 codes
+	UserDefinedProjection Projection = "user-defined"
+
 
 	//Section 6.3.3.3 codes
 	EPSG3857 ProjCSTType = "EPSG:3857"
 	PCS_WGS84_UTM_zone_1N ProjCSTType = "WGS84_UTM_zone_1N"
+	PCS_WGS84_UTM_zone_33N ProjCSTType = "WGS84_UTM_zone_33N"
+	UserDefinedCSTType ProjCSTType = "user-defined"
 
 	//Section 6.3.3.3 codes
 	CTTransverseMercator ProjCoordTrans = "TransverseMercator"
 	CTAlbersEqualArea ProjCoordTrans = "AlbersEqualArea"
 	CTSinusoidal ProjCoordTrans = "Sinusoidal"
+
 )
 
 type GeoCode struct {
@@ -106,6 +116,8 @@ func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 		switch k.ValueOffset {
 		case 4326:
 			g.GeographicType = GCS_WGS84
+		case 32767:
+			g.GeographicType = UserDefinedGeogType
 		default:
 			return FormatError(fmt.Sprintf("GeographicType: %d not recognised", k.ValueOffset))
 		}
@@ -117,6 +129,8 @@ func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 		switch k.ValueOffset {
 		case 6326:
 			g.GeogGeodeticDatum = DatumWGS84
+		case 32767:
+			g.GeogGeodeticDatum = UserDefinedGeodDatum
 		default:
 			return FormatError(fmt.Sprintf("GeogGeodeticDatum: %d not recognised", k.ValueOffset))
 		}
@@ -135,6 +149,8 @@ func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 			g.GeogEllipsoid = EllipseWGS84
 		case 7035:
 			g.GeogEllipsoid = EllipseSphere
+		case 32767:
+			g.GeogEllipsoid = UserDefinedGeogEllipsoid
 		default:
 			return FormatError(fmt.Sprintf("GeogEllipsoid: %d not recognised", k.ValueOffset))
 		}
@@ -157,11 +173,17 @@ func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 			g.ProjCSTType = EPSG3857
 		case 32601:
 			g.ProjCSTType = PCS_WGS84_UTM_zone_1N
+		case 32633:
+			g.ProjCSTType = PCS_WGS84_UTM_zone_33N
+		case 32767:
+			g.ProjCSTType = UserDefinedCSTType
 		default:
 			return FormatError(fmt.Sprintf("ProjectedCSType: %d not recognised", k.ValueOffset))
 		}
 	case ProjectionGeoKey:
 		switch k.ValueOffset {
+		case 32767:
+			g.Projection = UserDefinedProjection
 		default:
 			return FormatError(fmt.Sprintf("ProjectionGeoKey: %d not recognised", k.ValueOffset))
 		}

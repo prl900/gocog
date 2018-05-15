@@ -11,6 +11,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"image"
 	"image/color"
 	"io"
@@ -56,6 +57,7 @@ type ImgDesc struct {
 	TileWidth          uint32
 	TileHeight         uint32
 	PhotometricInterpr uint16
+	Predictor          uint16
 	Compression        uint16
 	SamplesPerPixel    uint16
 	BitsPerSample      []uint16
@@ -105,8 +107,10 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	var kEntries []KeyEntry
 	var dParams []float64
 	var aParams string
+	var tiePoint []float64
+	var pixelScale []float64
 
-	imgDesc := ImgDesc{SampleFormat:[]uint16{1}}
+	imgDesc := ImgDesc{SampleFormat:[]uint16{1}, Predictor:1}
 	nonCaptTags := []uint16{}
 
 	for i := 0; i < len(ifd); i += ifdLen {
@@ -170,6 +174,14 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 				return 0, FormatError(fmt.Sprintf("SampleFormat type: %v not recognised", datatype))
 			}
 			imgDesc.SampleFormat = []uint16{d.bo.Uint16(ifd[i+8 : i+10])}
+		case cPredictor:
+			if datatype != dtShort {
+				return 0, FormatError(fmt.Sprintf("SampleFormat type: %v not recognised", datatype))
+			}
+			imgDesc.Predictor = d.bo.Uint16(ifd[i+8 : i+10])
+			if imgDesc.Predictor != 1 && imgDesc.Predictor != 2 {
+				return 0, FormatError(fmt.Sprintf("Predictor other then 1=None or 2=Horizontal not implemented: %v", imgDesc.Predictor))
+			}
 		case cTileWidth:
 			if count != 1 {
 				return 0, FormatError(fmt.Sprintf("TileWidth count: %d not recognised", count))
@@ -240,7 +252,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			aParams = string(raw)
 		case tGeoKeyDirectory:
 			if datatype != dtShort || count < 4 {
-				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory type: %v  or count: %d not recognised", datatype, count))
+				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory type: %v or count: %d not recognised", datatype, count))
 			}
 			var raw []byte
 			// The IFD contains a pointer to the real value.
@@ -265,18 +277,49 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 				kEntries[i].Count = data[4*(i+1)+2]
 				kEntries[i].ValueOffset = data[4*(i+1)+3]
 			}
-		case tModelPixelScale, tModelTiepoint, tModelTransformation:
-			fmt.Println("GeoTIFF tag:", tag)
+		case tModelPixelScale:
+			if datatype != dtFloat64 || count != 3 {
+				return 0, FormatError(fmt.Sprintf("ModelTiePoint type: %v or count: %d not recognised", datatype, count))
+			}
+			var raw []byte
+			// The IFD contains a pointer to the real value.
+			raw = make([]byte, int(count)*8)
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+
+			pixelScale = make([]float64, count)
+			for i := uint32(0); i < count; i++ {
+				pixelScale[i] = math.Float64frombits(d.bo.Uint64(raw[8*i : 8*(i+1)]))
+			}
+		case tModelTiepoint:
+			if datatype != dtFloat64 {
+				return 0, FormatError(fmt.Sprintf("ModelTiePoint type: %v not recognised", datatype))
+			}
+			var raw []byte
+			// The IFD contains a pointer to the real value.
+			raw = make([]byte, int(count)*8)
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+
+			tiePoint = make([]float64, count)
+			for i := uint32(0); i < count; i++ {
+				tiePoint[i] = math.Float64frombits(d.bo.Uint64(raw[8*i : 8*(i+1)]))
+			}
+		case tModelTransformation:
+			return 0, fmt.Errorf("Time to implement ModelTransformation, this file uses it!")
 		default:
 			nonCaptTags = append(nonCaptTags, tag)
 		}
 	}
-	fmt.Println("Non captured tag:", nonCaptTags)
+	log.Println("ImgDesc:", imgDesc)
+	log.Println("Non captured tag:", nonCaptTags)
 	geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
+	log.Println("tiePoint:", tiePoint)
+	log.Println("pixelScale:", pixelScale)
 	if err != nil {
 		return 0, err
 	}
-	fmt.Println(geo)
+	log.Println(geo)
+
+
 	d.dsc = append(d.dsc, imgDesc)
 
 	nextIFDOffset := ifdOffset + int64(2) + int64(numItems*12)
@@ -337,7 +380,42 @@ func (d *decoder) colorModel(level int) color.Model {
 // It reads from d.buf and writes the strip or tile into dst.
 func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) error {
 	cfg := d.dsc[level]
-	off := 0
+
+	//Horizontal differencing
+	if cfg.Predictor == 2 {
+		off := 0
+		switch cfg.BitsPerSample[0] {
+		case 8:
+			for y := 0; y < int(cfg.TileHeight); y++ {
+				var v0 uint8
+				for x := 0; x < int(cfg.TileWidth); x++ {
+					v := d.buf[off]
+					if x > 0 {
+						v += v0
+					}
+					d.buf[off] = v
+					v0 = v
+					off++
+				}
+			}
+		case 16:
+			for y := 0; y < int(cfg.TileHeight); y++ {
+				var v0 uint16
+				for x := 0; x < int(cfg.TileWidth); x++ {
+					v := d.bo.Uint16(d.buf[off:off+2])
+					if x > 0 {
+						v += v0
+					}
+					d.bo.PutUint16(d.buf[off:off+2], v)
+					v0 = v
+					off += 2
+				}
+			}
+		default:
+			return FormatError("Predictor not implemented for other bitsizes than 8 or 16")
+		}
+	}
+
 
 	rMaxX := minInt(xmax, dst.Bounds().Max.X)
 	rMaxY := minInt(ymax, dst.Bounds().Max.Y)
@@ -346,6 +424,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 		return FormatError("image data type not implemented")
 	}
 
+	off := 0
 	switch img := dst.(type) {
 	case *scimage.GrayU8:
 		for y := ymin; y < rMaxY; y++ {
@@ -367,7 +446,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 				if off+2 > len(d.buf) {
 					return errNoPixels
 				}
-				v := uint16(d.buf[off+0])<<8 | uint16(d.buf[off+1])
+				v := d.bo.Uint16(d.buf[off:off+2])
 				off += 2
 				img.SetGrayU16(x, y, scicolor.GrayU16{v, img.Min, img.Max})
 			}
@@ -395,7 +474,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 				if off+2 > len(d.buf) {
 					return errNoPixels
 				}
-				v := int16(d.buf[off+0])<<8 | int16(d.buf[off+1])
+				v := int16(d.bo.Uint16(d.buf[off:off+2]))
 				off += 2
 				img.SetGrayS16(x, y, scicolor.GrayS16{v, img.Min, img.Max})
 			}
