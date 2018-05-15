@@ -106,7 +106,9 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	var dParams []float64
 	var aParams string
 
-	imgDesc := ImgDesc{}
+	imgDesc := ImgDesc{SampleFormat:[]uint16{1}}
+	nonCaptTags := []uint16{}
+
 	for i := 0; i < len(ifd); i += ifdLen {
 
 		tag := d.bo.Uint16(ifd[i : i+2])
@@ -116,13 +118,12 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 		switch tag {
 		case cNewSubfileType:
 			if datatype != dtLong || count != 1 {
-				fmt.Println(datatype, count)
-				return 0, FormatError("1unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("NewSubfileType type: %v not recognised", datatype))
 			}
 			imgDesc.NewSubfileType = d.bo.Uint32(ifd[i+8 : i+12])
 		case cImageWidth:
 			if count != 1 {
-				return 0, FormatError("2unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("ImageWidth count: %d not recognised", count))
 			}
 			switch datatype {
 			case dtShort:
@@ -130,11 +131,11 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.ImageWidth = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("3unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("ImageWidth type: %d not recognised", datatype))
 			}
 		case cImageLength:
 			if count != 1 {
-				return 0, FormatError("4unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("ImageLength count: %d not recognised", count))
 			}
 			switch datatype {
 			case dtShort:
@@ -142,42 +143,36 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.ImageHeight = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("5unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("ImageLength type: %v not recognised", datatype))
 			}
 		case cBitsPerSample:
 			if datatype != dtShort {
-				return 0, FormatError("6unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("BitsPerSample type: %v not recognised", datatype))
 			}
-			fmt.Println("BPS-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
-			fmt.Println("-------", count, d.bo.Uint16(ifd[i+10 : i+12]))
-			fmt.Println("-------", count, d.bo.Uint16(ifd[i+12 : i+14]))
-			fmt.Println("-------", count, d.bo.Uint16(ifd[i+14 : i+16]))
 			imgDesc.BitsPerSample = []uint16{d.bo.Uint16(ifd[i+8 : i+10])}
 		case cCompression:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("7unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("Compression type: %v or count: %d not recognised", datatype, count))
 			}
 			imgDesc.Compression = d.bo.Uint16(ifd[i+8 : i+10])
 		case cPhotometricInterpr:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("8unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("PhotometricInterpretation type: %v or count: %d not recognised", datatype, count))
 			}
-			fmt.Println("Phot-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
 			imgDesc.PhotometricInterpr = d.bo.Uint16(ifd[i+8 : i+10])
 		case cSamplesPerPixel:
 			if datatype != dtShort || count != 1 {
-				return 0, FormatError("9unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("SamplesPerPixel type: %v or count: %d not recognised", datatype, count))
 			}
-			fmt.Println("SPP-------", count, d.bo.Uint16(ifd[i+8 : i+10]))
 			imgDesc.SamplesPerPixel = d.bo.Uint16(ifd[i+8 : i+10])
 		case cSampleFormat:
 			if datatype != dtShort {
-				return 0, FormatError("10unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("SampleFormat type: %v not recognised", datatype))
 			}
 			imgDesc.SampleFormat = []uint16{d.bo.Uint16(ifd[i+8 : i+10])}
 		case cTileWidth:
 			if count != 1 {
-				return 0, FormatError("11unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("TileWidth count: %d not recognised", count))
 			}
 			switch datatype {
 			case dtShort:
@@ -185,11 +180,11 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.TileWidth = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("12unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("TileWidth type: %v not recognised", datatype))
 			}
 		case cTileLength:
 			if count != 1 {
-				return 0, FormatError("13unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("TileLength count: %d not recognised", count))
 			}
 			switch datatype {
 			case dtShort:
@@ -197,11 +192,11 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			case dtLong:
 				imgDesc.TileHeight = d.bo.Uint32(ifd[i+8 : i+12])
 			default:
-				return 0, FormatError("14unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("TileLength type: %v not recognised", datatype))
 			}
 		case cTileOffsets, cTileByteCounts:
 			if datatype != dtLong {
-				return 0, FormatError("15unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("TileOffsets or TileByteCounts type: %v not recognised", datatype))
 			}
 
 			var raw []byte
@@ -223,7 +218,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			}
 		case GeoDoubleParamsTag:
 			if datatype != dtFloat64 {
-				return 0, FormatError("16.1unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("DoubleParamsTag type: %v not recognised", datatype))
 			}
 			var raw []byte
 			// The IFD contains a pointer to the real value.
@@ -236,7 +231,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			}
 		case GeoAsciiParamsTag:
 			if datatype != dtASCII {
-				return 0, FormatError("16.2unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("GeogASCIIParamsTag type: %v not recognised", datatype))
 			}
 			var raw []byte
 			// The IFD contains a pointer to the real value.
@@ -245,7 +240,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			aParams = string(raw)
 		case tGeoKeyDirectory:
 			if datatype != dtShort || count < 4 {
-				return 0, FormatError("16unexpected value found on IFD")
+				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory type: %v  or count: %d not recognised", datatype, count))
 			}
 			var raw []byte
 			// The IFD contains a pointer to the real value.
@@ -256,14 +251,12 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			for i := uint32(0); i < count; i++ {
 				data[i] = d.bo.Uint16(raw[2*i : 2*(i+1)])
 			}
-			fmt.Println("tGeoKeyDirectory tag:", tag, count, data)
 
 			keyDirVersion := data[0]
 			if keyDirVersion != 1 {
-				return 0, FormatError("16unexpected Key Directory Version value found in GeoKeyDirectory tag")
+				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory version: %d  not recognised", keyDirVersion))
 			}
 			numKeys := int(data[3])
-			fmt.Println("numKeys", numKeys)
 
 			kEntries = make([]KeyEntry, numKeys)
 			for i := 0; i<numKeys; i++ {
@@ -275,11 +268,14 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 		case tModelPixelScale, tModelTiepoint, tModelTransformation:
 			fmt.Println("GeoTIFF tag:", tag)
 		default:
-			fmt.Println("Non captured tag:", tag)
-
+			nonCaptTags = append(nonCaptTags, tag)
 		}
 	}
-	geo := parseGeoKeyDirectory(kEntries, dParams, aParams)
+	fmt.Println("Non captured tag:", nonCaptTags)
+	geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
+	if err != nil {
+		return 0, err
+	}
 	fmt.Println(geo)
 	d.dsc = append(d.dsc, imgDesc)
 

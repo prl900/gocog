@@ -2,22 +2,70 @@ package gocog
 
 import "fmt"
 
+type ModelType string
+type RasterType string
+type GeographicType string
+type ProjCoordTrans string
+type GeogGeodeticDatum string
+type GeogEllipsoid string
+type GeogAngularUnits string
+type ProjCSTType string
+type ProjLinearUnits string
+type Projection string
+
+const (
+	Projected ModelType = "Projected"
+	Geographic ModelType = "Geographic"
+	Geocentric ModelType = "Geocentric"
+
+	PixelIsArea RasterType = "PixelIsArea"
+	PixelIsPoint RasterType = "PixelIsPoint"
+
+	//Section 6.3.1.3 codes
+	LinearMeter ProjLinearUnits = "Meter"
+
+	//Section 6.3.1.4 codes
+	AngularRadian GeogAngularUnits = "Radian"
+	AngularDegree GeogAngularUnits = "Degree"
+
+	//Section 6.3.2.1 codes
+	GCS_WGS84 GeographicType = "WGS_84"
+
+	//Section 6.3.2.2 codes
+	DatumWGS84 GeogGeodeticDatum = "WGS_84"
+
+	//Section 6.3.2.3 codes
+	EllipseWGS84 GeogEllipsoid = "WGS_84"
+	EllipseSphere GeogEllipsoid = "Sphere"
+
+	//Section 6.3.3.3 codes
+	EPSG3857 ProjCSTType = "EPSG:3857"
+	PCS_WGS84_UTM_zone_1N ProjCSTType = "WGS84_UTM_zone_1N"
+
+	//Section 6.3.3.3 codes
+	CTTransverseMercator ProjCoordTrans = "TransverseMercator"
+	CTAlbersEqualArea ProjCoordTrans = "AlbersEqualArea"
+	CTSinusoidal ProjCoordTrans = "Sinusoidal"
+)
+
 type GeoCode struct {
-	ModelType uint16
-	RasterType uint16
+	ModelType
+	RasterType
 	Citation string
-	GeographicType uint16
+
+	GeographicType
 	GeogCitation string
-	GeogGeodeticDatum uint16
-	GeogAngularUnits uint16
-	GeogEllipsoid uint16
+	GeogGeodeticDatum
+	GeogAngularUnits
+	GeogEllipsoid
 	GeogSemiMajorAxis float64
 	GeogSemiMinorAxis float64
 	GeogPrimeMeridianLong float64
-	ProjCSTType uint16
-	Proj uint16
-	ProjCoordTrans uint16
-	ProjLinearUnits uint16
+
+	ProjCSTType
+	Projection
+	ProjCoordTrans
+	ProjLinearUnits
 	ProjFalseEasting float64
 	ProjFalseNorthing float64
 	ProjCenterLong float64
@@ -29,70 +77,139 @@ type KeyEntry struct {
 
 func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 	switch k.KeyID {
-	case 1024:
-		g.ModelType = k.ValueOffset
-	case 1025:
-		g.RasterType = k.ValueOffset
-	case 1026:
+	case GTModelTypeGeoKey:
+		switch k.ValueOffset {
+		case 1:
+			g.ModelType = Projected
+		case 2:
+			g.ModelType = Geographic
+		case 3:
+			g.ModelType = Geocentric
+		default:
+			return FormatError(fmt.Sprintf("ModelType: %d not recognised", k.ValueOffset))
+		}
+	case GTRasterTypeGeoKey:
+		switch k.ValueOffset {
+		case 1:
+			g.RasterType = PixelIsArea
+		case 2:
+			g.RasterType = PixelIsPoint
+		default:
+			return FormatError(fmt.Sprintf("RasterType: %d not recognised", k.ValueOffset))
+		}
+	case GTCitationGeoKey:
 		if k.TIFFTagLocation == GeoAsciiParamsTag {
 			g.Citation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
 
 		}
-	case 2048:
-		g.GeographicType = k.ValueOffset
-	case 2049:
+	case GeographicTypeGeoKey:
+		switch k.ValueOffset {
+		case 4326:
+			g.GeographicType = GCS_WGS84
+		default:
+			return FormatError(fmt.Sprintf("GeographicType: %d not recognised", k.ValueOffset))
+		}
+	case GeogCitationGeoKey:
 		if k.TIFFTagLocation == GeoAsciiParamsTag {
 			g.GeogCitation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
 		}
-	case 2050:
-		g.GeogGeodeticDatum = k.ValueOffset
-	case 2054:
-		g.GeogAngularUnits = k.ValueOffset
-	case 2056:
-		g.GeogEllipsoid = k.ValueOffset
-	case 2057:
+	case GeogGeodeticDatumGeoKey:
+		switch k.ValueOffset {
+		case 6326:
+			g.GeogGeodeticDatum = DatumWGS84
+		default:
+			return FormatError(fmt.Sprintf("GeogGeodeticDatum: %d not recognised", k.ValueOffset))
+		}
+	case GeogAngularUnitsGeoKey:
+		switch k.ValueOffset {
+		case 9101:
+			g.GeogAngularUnits = AngularRadian
+		case 9102:
+			g.GeogAngularUnits = AngularDegree
+		default:
+			return FormatError(fmt.Sprintf("GeogAngularUnits: %d not recognised", k.ValueOffset))
+		}
+	case GeogEllipsoidGeoKey:
+		switch k.ValueOffset {
+		case 7030:
+			g.GeogEllipsoid = EllipseWGS84
+		case 7035:
+			g.GeogEllipsoid = EllipseSphere
+		default:
+			return FormatError(fmt.Sprintf("GeogEllipsoid: %d not recognised", k.ValueOffset))
+		}
+	case GeogSemiMajorAxisGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.GeogSemiMajorAxis = dParams[k.ValueOffset]
 		}
-	case 2058:
+	case GeogSemiMinorAxisGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.GeogSemiMinorAxis = dParams[k.ValueOffset]
 		}
-	case 2061:
+	case GeogPrimeMeridianLongGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.GeogPrimeMeridianLong = dParams[k.ValueOffset]
 		}
-	case 3072:
-		g.ProjCSTType = k.ValueOffset
-	case 3074:
-		g.Proj = k.ValueOffset
-	case 3075:
-		g.ProjCoordTrans = k.ValueOffset
-	case 3076:
-		g.ProjLinearUnits = k.ValueOffset
-	case 3082:
+
+	case ProjectedCSTypeGeoKey:
+		switch k.ValueOffset {
+		case 3857:
+			g.ProjCSTType = EPSG3857
+		case 32601:
+			g.ProjCSTType = PCS_WGS84_UTM_zone_1N
+		default:
+			return FormatError(fmt.Sprintf("ProjectedCSType: %d not recognised", k.ValueOffset))
+		}
+	case ProjectionGeoKey:
+		switch k.ValueOffset {
+		default:
+			return FormatError(fmt.Sprintf("ProjectionGeoKey: %d not recognised", k.ValueOffset))
+		}
+	case ProjCoordTransGeoKey:
+		switch k.ValueOffset {
+		case 1:
+			g.ProjCoordTrans = CTTransverseMercator
+		case 11:
+			g.ProjCoordTrans = CTAlbersEqualArea
+		case 24:
+			g.ProjCoordTrans = CTSinusoidal
+		default:
+			return FormatError(fmt.Sprintf("ProjCoordTrans: %d not recognised", k.ValueOffset))
+		}
+
+	case ProjLinearUnitsGeoKey:
+		switch k.ValueOffset {
+		case 9001:
+			g.ProjLinearUnits = LinearMeter
+		default:
+			return FormatError(fmt.Sprintf("ProjLinearUnits: %d not recognised", k.ValueOffset))
+		}
+	case ProjFalseEastingGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.ProjFalseEasting = dParams[k.ValueOffset]
 		}
-	case 3083:
+	case ProjFalseNorthingGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.ProjFalseNorthing = dParams[k.ValueOffset]
 		}
-	case 3088:
+	case ProjCenterLongGeoKey:
 		if k.TIFFTagLocation == GeoDoubleParamsTag {
 			g.ProjCenterLong = dParams[k.ValueOffset]
 		}
 	default:
-		fmt.Println("Not processed", k)
+		return FormatError(fmt.Sprintf("GeoKey: %d not implemented", k.ValueOffset))
 	}
 
 	return nil
 }
 
-func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string) GeoCode {
+func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string) (GeoCode, error) {
 	gc := GeoCode{}
 	for _, kEntry := range kEntries {
-		gc.extract(kEntry, dParams, aParams)
+		err := gc.extract(kEntry, dParams, aParams)
+		if err != nil {
+			return gc, err
+		}
 	}
-	return gc
+	return gc, nil
 }
