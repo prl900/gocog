@@ -58,7 +58,7 @@ const (
 
 )
 
-type GeoCode struct {
+type GeoData struct {
 	ModelType
 	RasterType
 	Citation string
@@ -85,7 +85,7 @@ type KeyEntry struct {
 	KeyID, TIFFTagLocation, Count, ValueOffset uint16
 	}
 
-func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
+func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 	switch k.KeyID {
 	case GTModelTypeGeoKey:
 		switch k.ValueOffset {
@@ -225,8 +225,8 @@ func (g *GeoCode) extract(k KeyEntry, dParams []float64, aParams string) error {
 	return nil
 }
 
-func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string) (GeoCode, error) {
-	gc := GeoCode{}
+func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string) (GeoData, error) {
+	gc := GeoData{}
 	for _, kEntry := range kEntries {
 		err := gc.extract(kEntry, dParams, aParams)
 		if err != nil {

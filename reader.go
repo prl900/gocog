@@ -66,11 +66,16 @@ type ImgDesc struct {
 	TileByteCounts     []uint32
 }
 
+type CRS struct {
+	Geotransform []float64
+}
+
 type decoder struct {
 	buf []byte
 	ra  io.ReaderAt
 	bo  binary.ByteOrder
 	dsc []ImgDesc
+	geot []float64
 }
 
 func newDecoder(r io.Reader) (decoder, error) {
@@ -81,9 +86,9 @@ func newDecoder(r io.Reader) (decoder, error) {
 	}
 	switch string(p[0:4]) {
 	case leHeader:
-		return decoder{nil, ra, binary.LittleEndian, []ImgDesc{}}, nil
+		return decoder{nil, ra, binary.LittleEndian, []ImgDesc{}, []float64{0,0,0,0,0,0}}, nil
 	case beHeader:
-		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}}, nil
+		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}, []float64{0,0,0,0,0,0}}, nil
 	}
 
 	return decoder{}, FormatError("malformed header 2")
@@ -111,7 +116,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	var pixelScale []float64
 
 	imgDesc := ImgDesc{SampleFormat:[]uint16{1}, Predictor:1}
-	nonCaptTags := []uint16{}
+	var nonCaptTags []uint16
 
 	for i := 0; i < len(ifd); i += ifdLen {
 
@@ -309,16 +314,21 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			nonCaptTags = append(nonCaptTags, tag)
 		}
 	}
-	log.Println("ImgDesc:", imgDesc)
 	log.Println("Non captured tag:", nonCaptTags)
+	log.Println("ImgDesc:", imgDesc)
 	geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
-	log.Println("tiePoint:", tiePoint)
-	log.Println("pixelScale:", pixelScale)
 	if err != nil {
 		return 0, err
 	}
-	log.Println(geo)
-
+	log.Println("geo:", geo)
+	if tiePoint != nil {
+		d.geot[0] = tiePoint[3]
+		d.geot[3] = tiePoint[4]
+	}
+	if pixelScale != nil {
+		d.geot[1] = pixelScale[0]
+		d.geot[5] = pixelScale[1]
+	}
 
 	d.dsc = append(d.dsc, imgDesc)
 
@@ -359,16 +369,16 @@ func (d *decoder) colorModel(level int) color.Model {
 		case uintSample:
 			switch cfg.BitsPerSample[0] {
 			case 8:
-				return scicolor.GrayU8Model{0, 255}
+				return scicolor.GrayU8Model{Max: 255}
 			case 16:
-				return scicolor.GrayU16Model{0, 65535}
+				return scicolor.GrayU16Model{Max: 65535}
 			}
 		case sintSample:
 			switch cfg.BitsPerSample[0] {
 			case 8:
-				return scicolor.GrayS8Model{-128, 127}
+				return scicolor.GrayS8Model{Min: -128, Max: 127}
 			case 16:
-				return scicolor.GrayS16Model{-32768, 32767}
+				return scicolor.GrayS16Model{Min: -32768, Max: 32767}
 			}
 		}
 	}
@@ -381,38 +391,34 @@ func (d *decoder) colorModel(level int) color.Model {
 func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) error {
 	cfg := d.dsc[level]
 
-	//Horizontal differencing
+	//Horizontal differencing encoding
 	if cfg.Predictor == 2 {
 		off := 0
 		switch cfg.BitsPerSample[0] {
 		case 8:
 			for y := 0; y < int(cfg.TileHeight); y++ {
-				var v0 uint8
+				v0 := d.buf[off]
 				for x := 0; x < int(cfg.TileWidth); x++ {
-					v := d.buf[off]
-					if x > 0 {
-						v += v0
-					}
-					d.buf[off] = v
-					v0 = v
 					off++
+					v1 := d.buf[off] + v0
+					d.buf[off] = v1
+					v0 = v1
 				}
+				off++
 			}
 		case 16:
 			for y := 0; y < int(cfg.TileHeight); y++ {
-				var v0 uint16
-				for x := 0; x < int(cfg.TileWidth); x++ {
-					v := d.bo.Uint16(d.buf[off:off+2])
-					if x > 0 {
-						v += v0
-					}
-					d.bo.PutUint16(d.buf[off:off+2], v)
-					v0 = v
+				v0 := d.bo.Uint16(d.buf[off:off+2])
+				for x := 1; x < int(cfg.TileWidth); x++ {
 					off += 2
+					v1 := d.bo.Uint16(d.buf[off:off+2]) + v0
+					d.bo.PutUint16(d.buf[off:off+2], v1)
+					v0 = v1
 				}
+				off += 2
 			}
 		default:
-			return FormatError("Predictor not implemented for other bitsizes than 8 or 16")
+			return FormatError("Predictor not implemented for bit-sizes other than 8 or 16")
 		}
 	}
 
