@@ -1,6 +1,10 @@
 package gocog
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"regexp"
+)
 
 type ModelType string
 type RasterType string
@@ -83,8 +87,41 @@ type GeoData struct {
 }
 
 func (gd GeoData) WKT() string {
-	return fmt.Sprintf(`PRIMEM["%s", %f]`, gd.GeogAngularUnits, gd.GeogPrimeMeridianLong)
+	cit := parseGeoAsciiParams(gd.GeogCitation)
+
+	if cit.Ellipsoid != "" {
+		return fmt.Sprintf(`SPHEROID["%s", %f, %f]`, cit.Ellipsoid, gd.GeogSemiMajorAxis,
+			gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis)
+	} else {
+		return fmt.Sprintf(`SPHEROID["%s", %f, %f]`, gd.GeogEllipsoid, gd.GeogSemiMajorAxis,
+			gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis)
+
+	}
+	//return fmt.Sprintf(`PRIMEM["%s", %f]`, gd.GeogAngularUnits, gd.GeogPrimeMeridianLong)
 	//return fmt.Sprintf(`UNIT["%s", 0.0174532925199433]`, gd.GeogAngularUnits)
+}
+
+type Citation struct {
+	Ellipsoid string
+	Primem string
+}
+
+func parseGeoAsciiParams(s string) Citation {
+	rawParams := strings.Split(s, "|")
+	ellps, _ := regexp.Compile(`\s*Ellipsoid\s*=\s*(?P<name>[a-zA-Z- +()0-9]+)\s*`)
+	primem, _ := regexp.Compile(`\s*Primem\s*=\s*(?P<name>[a-zA-Z- +()0-9]+)\s*`)
+
+	cit := Citation{}
+	for _, rawParam := range rawParams {
+		if res := ellps.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Ellipsoid = res[1]
+		}
+		if res := primem.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Primem = res[1]
+		}
+	}
+
+	return cit
 }
 
 type KeyEntry struct { 

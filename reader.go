@@ -266,7 +266,6 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			raw := make([]byte, int(count))
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 			aParams = string(raw)
-			fmt.Println("AAAA", aParams)
 		case tGeoKeyDirectory:
 			if datatype != dtShort || count < 4 {
 				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory type: %v or count: %d not recognised", datatype, count))
@@ -350,7 +349,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			return 0, err
 		}
 		d.gt.CRS = geo.WKT()
-		log.Printf("Resulting geo: %+v\n", geo)
+		log.Printf("Resulting geo: %+v\n", geo.WKT())
 	}
 
 	if tiePoint != nil {
