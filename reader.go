@@ -21,6 +21,8 @@ import (
 	"github.com/terrascope/scimage"
 	"github.com/terrascope/scimage/scicolor"
 	"math"
+	"strconv"
+	"bytes"
 )
 
 // A FormatError reports that the input is not a valid TIFF image.
@@ -50,6 +52,15 @@ func minInt(a, b int) int {
 
 // TODO: Does cog need to support stripped files?
 // TODO: stripped files are not implemented for the moment
+
+type GeoTIFF struct {
+	Overviews []ImgDesc
+	Geotransform [6]float64
+	CRS string
+	NoData float64
+	GDALMetadata string
+}
+
 type ImgDesc struct {
 	NewSubfileType     uint32
 	ImageWidth         uint32
@@ -66,16 +77,11 @@ type ImgDesc struct {
 	TileByteCounts     []uint32
 }
 
-type CRS struct {
-	Geotransform []float64
-}
-
 type decoder struct {
 	buf []byte
 	ra  io.ReaderAt
 	bo  binary.ByteOrder
-	dsc []ImgDesc
-	geot []float64
+	gt   GeoTIFF
 }
 
 func newDecoder(r io.Reader) (decoder, error) {
@@ -86,9 +92,9 @@ func newDecoder(r io.Reader) (decoder, error) {
 	}
 	switch string(p[0:4]) {
 	case leHeader:
-		return decoder{nil, ra, binary.LittleEndian, []ImgDesc{}, []float64{0,0,0,0,0,0}}, nil
+		return decoder{nil, ra, binary.LittleEndian, GeoTIFF{}}, nil
 	case beHeader:
-		return decoder{nil, ra, binary.BigEndian, []ImgDesc{}, []float64{0,0,0,0,0,0}}, nil
+		return decoder{nil, ra, binary.BigEndian, GeoTIFF{}}, nil
 	}
 
 	return decoder{}, FormatError("malformed header 2")
@@ -119,7 +125,6 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	var nonCaptTags []uint16
 
 	for i := 0; i < len(ifd); i += ifdLen {
-
 		tag := d.bo.Uint16(ifd[i : i+2])
 		datatype := d.bo.Uint16(ifd[i+2 : i+4])
 		count := d.bo.Uint32(ifd[i+4 : i+8])
@@ -174,6 +179,14 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 				return 0, FormatError(fmt.Sprintf("SamplesPerPixel type: %v or count: %d not recognised", datatype, count))
 			}
 			imgDesc.SamplesPerPixel = d.bo.Uint16(ifd[i+8 : i+10])
+		case cPlanarConfiguration:
+			if datatype != dtShort {
+				return 0, FormatError(fmt.Sprintf("SampleFormat type: %v not recognised", datatype))
+			}
+			pConf := d.bo.Uint16(ifd[i+8 : i+10])
+			if pConf != 1 {
+				return 0, fmt.Errorf("Planar configuration other then 'chunky' has not been implemented: %d", pConf)
+			}
 		case cSampleFormat:
 			if datatype != dtShort {
 				return 0, FormatError(fmt.Sprintf("SampleFormat type: %v not recognised", datatype))
@@ -185,7 +198,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			}
 			imgDesc.Predictor = d.bo.Uint16(ifd[i+8 : i+10])
 			if imgDesc.Predictor != 1 && imgDesc.Predictor != 2 {
-				return 0, FormatError(fmt.Sprintf("Predictor other then 1=None or 2=Horizontal not implemented: %v", imgDesc.Predictor))
+				return 0, fmt.Errorf("Predictor other then 1=None or 2=Horizontal not implemented: %v", imgDesc.Predictor)
 			}
 		case cTileWidth:
 			if count != 1 {
@@ -237,9 +250,8 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			if datatype != dtFloat64 {
 				return 0, FormatError(fmt.Sprintf("DoubleParamsTag type: %v not recognised", datatype))
 			}
-			var raw []byte
 			// The IFD contains a pointer to the real value.
-			raw = make([]byte, int(count)*8)
+			raw := make([]byte, int(count)*8)
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 
 			dParams = make([]float64, count)
@@ -250,18 +262,17 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			if datatype != dtASCII {
 				return 0, FormatError(fmt.Sprintf("GeogASCIIParamsTag type: %v not recognised", datatype))
 			}
-			var raw []byte
 			// The IFD contains a pointer to the real value.
-			raw = make([]byte, int(count)*4)
+			raw := make([]byte, int(count))
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 			aParams = string(raw)
+			fmt.Println("AAAA", aParams)
 		case tGeoKeyDirectory:
 			if datatype != dtShort || count < 4 {
 				return 0, FormatError(fmt.Sprintf("GeoKeyDirectory type: %v or count: %d not recognised", datatype, count))
 			}
-			var raw []byte
 			// The IFD contains a pointer to the real value.
-			raw = make([]byte, int(count)*2)
+			raw := make([]byte, int(count)*2)
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 
 			data := make([]uint16, count)
@@ -286,9 +297,8 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			if datatype != dtFloat64 || count != 3 {
 				return 0, FormatError(fmt.Sprintf("ModelTiePoint type: %v or count: %d not recognised", datatype, count))
 			}
-			var raw []byte
 			// The IFD contains a pointer to the real value.
-			raw = make([]byte, int(count)*8)
+			raw := make([]byte, int(count)*8)
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 
 			pixelScale = make([]float64, count)
@@ -299,9 +309,8 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			if datatype != dtFloat64 {
 				return 0, FormatError(fmt.Sprintf("ModelTiePoint type: %v not recognised", datatype))
 			}
-			var raw []byte
 			// The IFD contains a pointer to the real value.
-			raw = make([]byte, int(count)*8)
+			raw := make([]byte, int(count)*8)
 			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
 
 			tiePoint = make([]float64, count)
@@ -310,27 +319,50 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			}
 		case tModelTransformation:
 			return 0, fmt.Errorf("Time to implement ModelTransformation, this file uses it!")
+		case tGDALNoData:
+			if datatype != dtASCII {
+				return 0, FormatError(fmt.Sprintf("GDALNoDataTag type: %v not recognised", datatype))
+			}
+			// The IFD contains a pointer to the real value.
+			raw := make([]byte, int(count))
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+			var err error
+			d.gt.NoData, err = strconv.ParseFloat(string(bytes.Trim(raw, "\x00")), 64)
+			if err != nil {
+				return 0, FormatError(fmt.Sprintf("GDAL NoData value %s cannot be parsed: %v", string(raw), err))
+			}
+		case tGDALMetadata:
+			if datatype != dtASCII {
+				return 0, FormatError(fmt.Sprintf("GDALMetadataTag type: %v not recognised", datatype))
+			}
+			// The IFD contains a pointer to the real value.
+			raw := make([]byte, int(count))
+			d.ra.ReadAt(raw, int64(d.bo.Uint32(ifd[i+8:i+12])))
+			d.gt.GDALMetadata = string(bytes.Trim(raw, "\x00"))
 		default:
 			nonCaptTags = append(nonCaptTags, tag)
 		}
 	}
 	log.Println("Non captured tag:", nonCaptTags)
-	log.Println("ImgDesc:", imgDesc)
-	geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
-	if err != nil {
-		return 0, err
-	}
-	log.Println("geo:", geo)
-	if tiePoint != nil {
-		d.geot[0] = tiePoint[3]
-		d.geot[3] = tiePoint[4]
-	}
-	if pixelScale != nil {
-		d.geot[1] = pixelScale[0]
-		d.geot[5] = pixelScale[1]
+	if dParams != nil && aParams != "" {
+		geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
+		if err != nil {
+			return 0, err
+		}
+		d.gt.CRS = geo.WKT()
+		log.Printf("Resulting geo: %+v\n", geo)
 	}
 
-	d.dsc = append(d.dsc, imgDesc)
+	if tiePoint != nil {
+		d.gt.Geotransform[0] = tiePoint[3]
+		d.gt.Geotransform[3] = tiePoint[4]
+	}
+	if pixelScale != nil {
+		d.gt.Geotransform[1] = tiePoint[0]
+		d.gt.Geotransform[5] = tiePoint[1]
+	}
+
+	d.gt.Overviews = append(d.gt.Overviews, imgDesc)
 
 	nextIFDOffset := ifdOffset + int64(2) + int64(numItems*12)
 	if _, err := d.ra.ReadAt(p[0:4], nextIFDOffset); err != nil {
@@ -355,12 +387,13 @@ func (d *decoder) readIFD() error {
 			return err
 		}
 	}
+	//log.Printf("Resulting file descriptor: %+v\n", d.gt)
 
 	return nil
 }
 
 func (d *decoder) colorModel(level int) color.Model {
-	cfg := d.dsc[level]
+	cfg := d.gt.Overviews[level]
 
 	// TODO get range in color modes dynamically from tiff file metadata?
 	switch cfg.PhotometricInterpr {
@@ -389,7 +422,7 @@ func (d *decoder) colorModel(level int) color.Model {
 // decode decodes the raw data of an image.
 // It reads from d.buf and writes the strip or tile into dst.
 func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) error {
-	cfg := d.dsc[level]
+	cfg := d.gt.Overviews[level]
 
 	//Horizontal differencing encoding
 	if cfg.Predictor == 2 {
@@ -496,7 +529,7 @@ func (d *decoder) decode(dst image.Image, level, xmin, ymin, xmax, ymax int) err
 }
 
 func decodeLevelSubImage(d decoder, level int, rect image.Rectangle) (img image.Image, err error) {
-	cfg := d.dsc[level]
+	cfg := d.gt.Overviews[level]
 
 	blockPadding := false
 	blocksAcross := 1
@@ -627,7 +660,7 @@ func DecodeLevel(r io.Reader, level int) (img image.Image, err error) {
 		return nil, err
 	}
 
-	cfg := d.dsc[level]
+	cfg := d.gt.Overviews[level]
 	rect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
 
 	return decodeLevelSubImage(d, level, rect)
@@ -643,7 +676,7 @@ func Decode(r io.Reader) (img image.Image, err error) {
 		return nil, err
 	}
 
-	cfg := d.dsc[0]
+	cfg := d.gt.Overviews[0]
 	rect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight))
 
 	return decodeLevelSubImage(d, 0, rect)
@@ -659,7 +692,7 @@ func DecodeConfigLevel(r io.Reader, level int) (image.Config, error) {
 		return image.Config{}, err
 	}
 
-	cfg := d.dsc[level]
+	cfg := d.gt.Overviews[level]
 
 	return image.Config{ColorModel: d.colorModel(level), Width: int(cfg.ImageWidth), Height: int(cfg.ImageHeight)}, nil
 }

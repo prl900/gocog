@@ -25,8 +25,8 @@ const (
 	LinearMeter ProjLinearUnits = "Meter"
 
 	//Section 6.3.1.4 codes
-	AngularRadian GeogAngularUnits = "Radian"
-	AngularDegree GeogAngularUnits = "Degree"
+	AngularRadian GeogAngularUnits = "radian"
+	AngularDegree GeogAngularUnits = "degree"
 
 	//Section 6.3.2.1 codes
 	GCS_WGS84 GeographicType = "WGS_84"
@@ -70,6 +70,7 @@ type GeoData struct {
 	GeogEllipsoid
 	GeogSemiMajorAxis float64
 	GeogSemiMinorAxis float64
+	GeogPrimeMeridian string
 	GeogPrimeMeridianLong float64
 
 	ProjCSTType
@@ -79,6 +80,11 @@ type GeoData struct {
 	ProjFalseEasting float64
 	ProjFalseNorthing float64
 	ProjCenterLong float64
+}
+
+func (gd GeoData) WKT() string {
+	return fmt.Sprintf(`PRIMEM["%s", %f]`, gd.GeogAngularUnits, gd.GeogPrimeMeridianLong)
+	//return fmt.Sprintf(`UNIT["%s", 0.0174532925199433]`, gd.GeogAngularUnits)
 }
 
 type KeyEntry struct { 
@@ -108,10 +114,10 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 			return FormatError(fmt.Sprintf("RasterType: %d not recognised", k.ValueOffset))
 		}
 	case GTCitationGeoKey:
-		if k.TIFFTagLocation == GeoAsciiParamsTag {
-			g.Citation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
-
+		if k.TIFFTagLocation != GeoAsciiParamsTag {
+			return FormatError(fmt.Sprintf("GTCitationGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.Citation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
 	case GeographicTypeGeoKey:
 		switch k.ValueOffset {
 		case 4326:
@@ -122,9 +128,10 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 			return FormatError(fmt.Sprintf("GeographicType: %d not recognised", k.ValueOffset))
 		}
 	case GeogCitationGeoKey:
-		if k.TIFFTagLocation == GeoAsciiParamsTag {
-			g.GeogCitation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
+		if k.TIFFTagLocation != GeoAsciiParamsTag {
+			return FormatError(fmt.Sprintf("GeogCitationGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.GeogCitation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
 	case GeogGeodeticDatumGeoKey:
 		switch k.ValueOffset {
 		case 6326:
@@ -155,18 +162,25 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 			return FormatError(fmt.Sprintf("GeogEllipsoid: %d not recognised", k.ValueOffset))
 		}
 	case GeogSemiMajorAxisGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.GeogSemiMajorAxis = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("GeogSemiMajorAxis is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.GeogSemiMajorAxis = dParams[k.ValueOffset]
 	case GeogSemiMinorAxisGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.GeogSemiMinorAxis = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("GeogSemiMinorAxis is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.GeogSemiMinorAxis = dParams[k.ValueOffset]
+	case GeogPrimeMeridianGeoKey:
+		if k.TIFFTagLocation != GeoAsciiParamsTag {
+			return FormatError(fmt.Sprintf("GeogPrimeMeridianGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
+		}
+		g.GeogPrimeMeridian = aParams[k.ValueOffset : k.ValueOffset+k.Count]
 	case GeogPrimeMeridianLongGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.GeogPrimeMeridianLong = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("GeogPrimeMeridianLongGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
-
+		g.GeogPrimeMeridianLong = dParams[k.ValueOffset]
 	case ProjectedCSTypeGeoKey:
 		switch k.ValueOffset {
 		case 3857:
@@ -198,7 +212,6 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 		default:
 			return FormatError(fmt.Sprintf("ProjCoordTrans: %d not recognised", k.ValueOffset))
 		}
-
 	case ProjLinearUnitsGeoKey:
 		switch k.ValueOffset {
 		case 9001:
@@ -207,17 +220,20 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 			return FormatError(fmt.Sprintf("ProjLinearUnits: %d not recognised", k.ValueOffset))
 		}
 	case ProjFalseEastingGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.ProjFalseEasting = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("ProjFalseEastingGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.ProjFalseEasting = dParams[k.ValueOffset]
 	case ProjFalseNorthingGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.ProjFalseNorthing = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("ProjFalseNorthingGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.ProjFalseNorthing = dParams[k.ValueOffset]
 	case ProjCenterLongGeoKey:
-		if k.TIFFTagLocation == GeoDoubleParamsTag {
-			g.ProjCenterLong = dParams[k.ValueOffset]
+		if k.TIFFTagLocation != GeoDoubleParamsTag {
+			return FormatError(fmt.Sprintf("ProjCenterLongGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
+		g.ProjCenterLong = dParams[k.ValueOffset]
 	default:
 		return FormatError(fmt.Sprintf("GeoKey: %d not implemented", k.ValueOffset))
 	}

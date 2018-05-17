@@ -49,6 +49,7 @@ const (
 	cCompression         = 259
 	cPhotometricInterpr  = 262
 	cSamplesPerPixel     = 277
+	cPlanarConfiguration = 284
 
 	cPredictor    = 317
 
@@ -62,6 +63,10 @@ const (
 
 
 const (
+	// GDAL tags
+	tGDALMetadata = 42112
+	tGDALNoData   = 42113
+
 	// GeoTIFF tags
 	tModelPixelScale     = 33550
 	tModelTiepoint       = 33922
@@ -114,9 +119,6 @@ const (
 	tExtraSamples = 338
 	tSampleFormat = 339
 
-	// GDAL tags
-	tGDALMetadata = 42112
-	tGDALNoData   = 42113
 )
 */
 
