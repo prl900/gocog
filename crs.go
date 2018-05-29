@@ -86,33 +86,105 @@ type GeoData struct {
 	ProjCenterLong float64
 }
 
+type Spheroid struct {
+	Name string
+	SemiMajorAxis float64
+	Flatenning float64
+}
+
+type Primem struct {
+	Name string
+	Lon float64
+}
+
+type Unit struct {
+	Name string
+	Value float64
+}
+
+type Datum struct {
+	Name string
+	Spheroid
+}
+
+type Parameter struct {
+	Name string
+	Value float64
+}
+
+type GeoGCS struct {
+	Datum
+	Primem
+	Unit
+}
+
+type ProjCS struct {
+	GeoGCS
+	ProjCoordTrans
+	Parameters []Parameter
+	Unit
+}
 func (gd GeoData) WKT() string {
 	cit := parseGeoAsciiParams(gd.GeogCitation)
 
-	if cit.Ellipsoid != "" {
-		return fmt.Sprintf(`SPHEROID["%s", %f, %f]`, cit.Ellipsoid, gd.GeogSemiMajorAxis,
-			gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis)
-	} else {
-		return fmt.Sprintf(`SPHEROID["%s", %f, %f]`, gd.GeogEllipsoid, gd.GeogSemiMajorAxis,
-			gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis)
+	pCS := ProjCS{}
 
+	if cit.Datum  != "" {
+		pCS.GeoGCS.Datum.Name = cit.Datum
+	} else {
+		pCS.GeoGCS.Datum.Name = string(gd.GeogGeodeticDatum)
 	}
-	//return fmt.Sprintf(`PRIMEM["%s", %f]`, gd.GeogAngularUnits, gd.GeogPrimeMeridianLong)
-	//return fmt.Sprintf(`UNIT["%s", 0.0174532925199433]`, gd.GeogAngularUnits)
+	if cit.Ellipsoid != "" {
+		pCS.GeoGCS.Datum.Spheroid.Name = cit.Ellipsoid
+	} else {
+		pCS.GeoGCS.Datum.Spheroid.Name = string(gd.GeogEllipsoid)
+	}
+	pCS.GeoGCS.Datum.Spheroid.SemiMajorAxis = gd.GeogSemiMajorAxis
+	pCS.GeoGCS.Datum.Spheroid.Flatenning = gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis
+
+	if cit.Primem != "" {
+		pCS.GeoGCS.Primem.Name = cit.Primem
+	} else {
+		pCS.GeoGCS.Primem.Name = string(gd.GeogPrimeMeridian)
+	}
+	pCS.GeoGCS.Primem.Lon = gd.GeogPrimeMeridianLong
+
+	pCS.GeoGCS.Unit.Name = string(gd.GeogAngularUnits)
+	pCS.GeoGCS.Unit.Value = 0.0174532925199433
+
+	pCS.ProjCoordTrans = gd.ProjCoordTrans
+	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "longitude_of_center", Value: gd.ProjCenterLong})
+	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "false_easting", Value: gd.ProjFalseEasting})
+	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "false_northing", Value: gd.ProjFalseNorthing})
+
+	pCS.Unit.Name = string(gd.ProjLinearUnits)
+	pCS.Unit.Value = 1
+	return fmt.Sprintf("%v", pCS)
 }
 
 type Citation struct {
+	GCS string
+	Datum string
 	Ellipsoid string
 	Primem string
 }
 
 func parseGeoAsciiParams(s string) Citation {
+	fmt.Println(s)
 	rawParams := strings.Split(s, "|")
-	ellps, _ := regexp.Compile(`\s*Ellipsoid\s*=\s*(?P<name>[a-zA-Z- +()0-9]+)\s*`)
-	primem, _ := regexp.Compile(`\s*Primem\s*=\s*(?P<name>[a-zA-Z- +()0-9]+)\s*`)
+	gcs, _ := regexp.Compile(`\s*GCS\sName\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	datum, _ := regexp.Compile(`\s*Datum\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	ellps, _ := regexp.Compile(`\s*Ellipsoid\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	primem, _ := regexp.Compile(`\s*Primem\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
 
 	cit := Citation{}
 	for _, rawParam := range rawParams {
+		if res := gcs.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.GCS = res[1]
+		}
+		if res := datum.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Datum = res[1]
+		}
 		if res := ellps.FindStringSubmatch(rawParam); len(res) == 2 {
 			cit.Ellipsoid = res[1]
 		}
