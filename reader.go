@@ -317,7 +317,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 				tiePoint[i] = math.Float64frombits(d.bo.Uint64(raw[8*i : 8*(i+1)]))
 			}
 		case tModelTransformation:
-			return 0, fmt.Errorf("Time to implement ModelTransformation, this file uses it!")
+			return 0, fmt.Errorf("time to implement ModelTransformation, this file uses it")
 		case tGDALNoData:
 			if datatype != dtASCII {
 				return 0, FormatError(fmt.Sprintf("GDALNoDataTag type: %v not recognised", datatype))
@@ -342,14 +342,14 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			nonCaptTags = append(nonCaptTags, tag)
 		}
 	}
-	log.Println("Non captured tag:", nonCaptTags)
+	log.Println("non captured tag:", nonCaptTags)
 	if dParams != nil && aParams != "" {
 		geo, err := parseGeoKeyDirectory(kEntries, dParams, aParams)
 		if err != nil {
 			return 0, err
 		}
-		d.gt.CRS = geo.WKT()
-		log.Printf("Resulting geo: %+v\n", geo.WKT())
+		d.gt.CRS, _ = geo.Proj4()
+		log.Printf("resulting geo: %+v\n", d.gt.CRS)
 	}
 
 	if tiePoint != nil {
@@ -386,7 +386,6 @@ func (d *decoder) readIFD() error {
 			return err
 		}
 	}
-	//log.Printf("Resulting file descriptor: %+v\n", d.gt)
 
 	return nil
 }
@@ -562,7 +561,7 @@ func decodeLevelSubImage(d decoder, level int, rect image.Rectangle) (img image.
 
 	imgRect := image.Rect(0, 0, int(cfg.ImageWidth), int(cfg.ImageHeight)).Intersect(rect)
 	if imgRect.Empty() {
-		return nil, fmt.Errorf("The rectangle provided does not intersect the image")
+		return nil, fmt.Errorf("the rectangle provided does not intersect the image")
 	}
 
 	switch v := d.colorModel(level).(type) {
@@ -636,6 +635,7 @@ func decodeLevelSubImage(d decoder, level int, rect image.Rectangle) (img image.
 	}
 	return
 }
+
 func DecodeLevelSubImage(r io.Reader, level int, rect image.Rectangle) (img image.Image, err error) {
 	d, err := newDecoder(r)
 	if err != nil {

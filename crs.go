@@ -26,7 +26,7 @@ const (
 	PixelIsPoint RasterType = "PixelIsPoint"
 
 	//Section 6.3.1.3 codes
-	LinearMeter ProjLinearUnits = "Meter"
+	LinearMeter ProjLinearUnits = "metre"
 
 	//Section 6.3.1.4 codes
 	AngularRadian GeogAngularUnits = "radian"
@@ -86,119 +86,9 @@ type GeoData struct {
 	ProjCenterLong float64
 }
 
-type Spheroid struct {
-	Name string
-	SemiMajorAxis float64
-	Flatenning float64
-}
-
-type Primem struct {
-	Name string
-	Lon float64
-}
-
-type Unit struct {
-	Name string
-	Value float64
-}
-
-type Datum struct {
-	Name string
-	Spheroid
-}
-
-type Parameter struct {
-	Name string
-	Value float64
-}
-
-type GeoGCS struct {
-	Datum
-	Primem
-	Unit
-}
-
-type ProjCS struct {
-	GeoGCS
-	ProjCoordTrans
-	Parameters []Parameter
-	Unit
-}
-func (gd GeoData) WKT() string {
-	cit := parseGeoAsciiParams(gd.GeogCitation)
-
-	pCS := ProjCS{}
-
-	if cit.Datum  != "" {
-		pCS.GeoGCS.Datum.Name = cit.Datum
-	} else {
-		pCS.GeoGCS.Datum.Name = string(gd.GeogGeodeticDatum)
-	}
-	if cit.Ellipsoid != "" {
-		pCS.GeoGCS.Datum.Spheroid.Name = cit.Ellipsoid
-	} else {
-		pCS.GeoGCS.Datum.Spheroid.Name = string(gd.GeogEllipsoid)
-	}
-	pCS.GeoGCS.Datum.Spheroid.SemiMajorAxis = gd.GeogSemiMajorAxis
-	pCS.GeoGCS.Datum.Spheroid.Flatenning = gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis
-
-	if cit.Primem != "" {
-		pCS.GeoGCS.Primem.Name = cit.Primem
-	} else {
-		pCS.GeoGCS.Primem.Name = string(gd.GeogPrimeMeridian)
-	}
-	pCS.GeoGCS.Primem.Lon = gd.GeogPrimeMeridianLong
-
-	pCS.GeoGCS.Unit.Name = string(gd.GeogAngularUnits)
-	pCS.GeoGCS.Unit.Value = 0.0174532925199433
-
-	pCS.ProjCoordTrans = gd.ProjCoordTrans
-	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "longitude_of_center", Value: gd.ProjCenterLong})
-	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "false_easting", Value: gd.ProjFalseEasting})
-	pCS.Parameters = append(pCS.Parameters, Parameter{Name: "false_northing", Value: gd.ProjFalseNorthing})
-
-	pCS.Unit.Name = string(gd.ProjLinearUnits)
-	pCS.Unit.Value = 1
-	return fmt.Sprintf("%v", pCS)
-}
-
-type Citation struct {
-	GCS string
-	Datum string
-	Ellipsoid string
-	Primem string
-}
-
-func parseGeoAsciiParams(s string) Citation {
-	fmt.Println(s)
-	rawParams := strings.Split(s, "|")
-	gcs, _ := regexp.Compile(`\s*GCS\sName\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
-	datum, _ := regexp.Compile(`\s*Datum\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
-	ellps, _ := regexp.Compile(`\s*Ellipsoid\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
-	primem, _ := regexp.Compile(`\s*Primem\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
-
-	cit := Citation{}
-	for _, rawParam := range rawParams {
-		if res := gcs.FindStringSubmatch(rawParam); len(res) == 2 {
-			cit.GCS = res[1]
-		}
-		if res := datum.FindStringSubmatch(rawParam); len(res) == 2 {
-			cit.Datum = res[1]
-		}
-		if res := ellps.FindStringSubmatch(rawParam); len(res) == 2 {
-			cit.Ellipsoid = res[1]
-		}
-		if res := primem.FindStringSubmatch(rawParam); len(res) == 2 {
-			cit.Primem = res[1]
-		}
-	}
-
-	return cit
-}
-
-type KeyEntry struct { 
+type KeyEntry struct {
 	KeyID, TIFFTagLocation, Count, ValueOffset uint16
-	}
+}
 
 func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 	switch k.KeyID {
@@ -358,5 +248,118 @@ func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string
 			return gc, err
 		}
 	}
+
+
 	return gc, nil
+}
+
+type Citation struct {
+	GCS string
+	Datum string
+	Ellipsoid string
+	Primem string
+}
+
+func parseGeoAsciiParams(s string) Citation {
+	fmt.Println(s)
+	rawParams := strings.Split(s, "|")
+	gcs, _ := regexp.Compile(`\s*GCS\sName\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	datum, _ := regexp.Compile(`\s*Datum\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	ellps, _ := regexp.Compile(`\s*Ellipsoid\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+	primem, _ := regexp.Compile(`\s*Primem\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
+
+	cit := Citation{}
+	for _, rawParam := range rawParams {
+		if res := gcs.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.GCS = res[1]
+		}
+		if res := datum.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Datum = res[1]
+		}
+		if res := ellps.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Ellipsoid = res[1]
+		}
+		if res := primem.FindStringSubmatch(rawParam); len(res) == 2 {
+			cit.Primem = res[1]
+		}
+	}
+
+	return cit
+}
+
+func (gd GeoData) WKT() (string, error) {
+	cit := parseGeoAsciiParams(gd.GeogCitation)
+
+	str := ""
+	if gd.ModelType != Projected {
+		return str, fmt.Errorf("Only Projected CRS are implemented")
+	}
+
+	str += `PROJCS["unnamed",`
+
+	str += fmt.Sprintf(`GEOGCS["%s",`, cit.GCS)
+
+	str += "DATUM["
+	if cit.Datum  != "" {
+		str += fmt.Sprintf(`"%s",`, cit.Datum)
+	} else {
+		str += fmt.Sprintf(`"%s",`, string(gd.GeogGeodeticDatum))
+	}
+
+	str += "SPHEROID["
+	if cit.Ellipsoid != "" {
+		str += fmt.Sprintf(`"%s",`, cit.Ellipsoid)
+	} else {
+		str += fmt.Sprintf(`"%s",`, string(gd.GeogEllipsoid))
+	}
+	str += fmt.Sprintf("%f,", gd.GeogSemiMajorAxis)
+	str += fmt.Sprintf("%f]],", gd.GeogSemiMajorAxis-gd.GeogSemiMinorAxis)
+
+	str += "PRIMEM["
+	if cit.Primem != "" {
+		str += fmt.Sprintf("%s,", cit.Primem)
+	} else {
+		str += fmt.Sprintf("%s,", string(gd.GeogPrimeMeridian))
+	}
+	str += fmt.Sprintf("%f],", gd.GeogPrimeMeridianLong)
+
+	str += fmt.Sprintf(`UNIT["%s",%f]],`, string(gd.GeogAngularUnits), 0.0174532925199433)
+
+	str += fmt.Sprintf(`PROJECTION["%s"],`, gd.ProjCoordTrans)
+	str += fmt.Sprintf(`PARAMETER["%s",%f],`, "longitude_of_center", gd.ProjCenterLong)
+	str += fmt.Sprintf(`PARAMETER["%s",%f],`, "false_easting", gd.ProjFalseEasting)
+	str += fmt.Sprintf(`PARAMETER["%s",%f],`, "false_northing", gd.ProjFalseNorthing)
+
+	str += fmt.Sprintf(`UNIT["%s",%f]]`, string(gd.ProjLinearUnits), 1.0)
+
+	return str, nil
+}
+
+func (gd GeoData) Proj4() (string, error) {
+
+	var str string
+
+	switch gd.ProjCoordTrans {
+	case "Sinusoidal":
+		str += "+proj=sinu "
+	default:
+		return str, fmt.Errorf("Projection %s not implemented", gd.ProjCoordTrans)
+	}
+
+	str += fmt.Sprintf(`+lon_0=%f `, gd.ProjCenterLong)
+	str += fmt.Sprintf(`+x_0=%f `, gd.ProjFalseEasting)
+	str += fmt.Sprintf(`+y_0=%f `, gd.ProjFalseNorthing)
+	str += fmt.Sprintf(`+a=%f `, gd.GeogSemiMajorAxis)
+	str += fmt.Sprintf(`+b=%f `, gd.GeogSemiMinorAxis)
+
+	switch gd.ProjLinearUnits {
+	case "metre":
+		str += "+units=m "
+	default:
+		return str, fmt.Errorf("Projection linear units %s not implemented", gd.ProjLinearUnits)
+	}
+
+	str += "+no_defs "
+
+	return str, nil
 }
