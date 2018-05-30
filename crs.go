@@ -335,31 +335,3 @@ func (gd GeoData) WKT() (string, error) {
 	return str, nil
 }
 
-func (gd GeoData) Proj4() (string, error) {
-
-	var str string
-
-	switch gd.ProjCoordTrans {
-	case "Sinusoidal":
-		str += "+proj=sinu "
-	default:
-		return str, fmt.Errorf("Projection %s not implemented", gd.ProjCoordTrans)
-	}
-
-	str += fmt.Sprintf(`+lon_0=%f `, gd.ProjCenterLong)
-	str += fmt.Sprintf(`+x_0=%f `, gd.ProjFalseEasting)
-	str += fmt.Sprintf(`+y_0=%f `, gd.ProjFalseNorthing)
-	str += fmt.Sprintf(`+a=%f `, gd.GeogSemiMajorAxis)
-	str += fmt.Sprintf(`+b=%f `, gd.GeogSemiMinorAxis)
-
-	switch gd.ProjLinearUnits {
-	case "metre":
-		str += "+units=m "
-	default:
-		return str, fmt.Errorf("Projection linear units %s not implemented", gd.ProjLinearUnits)
-	}
-
-	str += "+no_defs "
-
-	return str, nil
-}
