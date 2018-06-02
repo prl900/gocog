@@ -326,7 +326,7 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 			}
 		case tModelPixelScale:
 			if datatype != dtFloat64 || count != 3 {
-				return 0, FormatError(fmt.Sprintf("ModelTiePoint type: %v or count: %d not recognised", datatype, count))
+				return 0, FormatError(fmt.Sprintf("ModelPixelScale type: %v or count: %d not recognised", datatype, count))
 			}
 			// The IFD contains a pointer to the real value.
 			raw := make([]byte, int(count)*8)
@@ -381,6 +381,10 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 		d.gt.Geotransform[1] = tiePoint[0]
 		d.gt.Geotransform[3] = tiePoint[4]
 		d.gt.Geotransform[5] = tiePoint[1]
+	}
+	if pixelScale != nil {
+		d.gt.Geotransform[1] = pixelScale[0]
+		d.gt.Geotransform[5] = -1*pixelScale[1]
 	}
 
 	d.gt.Overviews = append(d.gt.Overviews, imgDesc)
