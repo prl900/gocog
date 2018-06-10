@@ -42,6 +42,8 @@ func (e UnsupportedError) Error() string {
 
 var errNoPixels = FormatError("not enough pixel data")
 
+type Geotransform [6]float64
+
 // minInt returns the smaller of x or y.
 func minInt(a, b int) int {
 	if a <= b {
@@ -55,10 +57,10 @@ type Overview struct {
 }
 
 // Slightly inspired on GDALInfo json output
-type Info struct {
+type GeoInfo struct {
 	Type         string     `json:"type"`
 	Size         [2]uint32  `json:"size"`
-	Geotransform [6]float64 `json:"geoTransform"`
+	GeoTrans Geotransform `json:"geoTransform"`
 	Proj4        string     `json:"proj4"`
 	NoData       float64    `json:"noDataValue"`
 	Overviews    []Overview `json:"overviews"`
@@ -68,17 +70,34 @@ type Info struct {
 // TODO: stripped files are not implemented for the moment
 
 type GeoTIFF struct {
+	kEntries     []KeyEntry
+	dParams      []float64
+	aParams      string
 	Overviews    []ImgDesc
-	kEntries []KeyEntry
-	dParams []float64
-	aParams string
-	Geotransform [6]float64
+	GeoTrans Geotransform
 	NoData       float64
 	GDALMetadata string
 }
 
-func (g GeoTIFF) Proj4() (string, error) {
+func (g GeoTIFF) Geotransform(level int) (Geotransform, error) {
+	if level < 0 || level >= len(g.Overviews) {
+		return Geotransform{0,0,0,0,0,0}, fmt.Errorf("level %d not in this geotiff", level)
+	}
 
+	if level == 0 {
+		return g.GeoTrans, nil
+	}
+
+	geot := g.GeoTrans
+	base := g.Overviews[0]
+	ovr := g.Overviews[level]
+	xScale := float64(base.ImageWidth/ovr.ImageWidth)
+	yScale := float64(base.ImageHeight/ovr.ImageHeight)
+
+	return Geotransform{geot[0], geot[1]*xScale, 0, geot[3], 0, geot[5]*yScale}, nil
+}
+
+func (g GeoTIFF) Proj4() (string, error) {
 	if g.dParams == nil || g.aParams == "" {
 		return "", fmt.Errorf("cannot process CRS data")
 	}
@@ -377,14 +396,14 @@ func (d *decoder) parseIFD(ifdOffset int64) (int64, error) {
 	log.Println("non captured tag:", nonCaptTags)
 
 	if tiePoint != nil {
-		d.gt.Geotransform[0] = tiePoint[3]
-		d.gt.Geotransform[1] = tiePoint[0]
-		d.gt.Geotransform[3] = tiePoint[4]
-		d.gt.Geotransform[5] = tiePoint[1]
+		d.gt.GeoTrans[0] = tiePoint[3]
+		d.gt.GeoTrans[1] = tiePoint[0]
+		d.gt.GeoTrans[3] = tiePoint[4]
+		d.gt.GeoTrans[5] = tiePoint[1]
 	}
 	if pixelScale != nil {
-		d.gt.Geotransform[1] = pixelScale[0]
-		d.gt.Geotransform[5] = -1*pixelScale[1]
+		d.gt.GeoTrans[1] = pixelScale[0]
+		d.gt.GeoTrans[5] = -1 * pixelScale[1]
 	}
 
 	d.gt.Overviews = append(d.gt.Overviews, imgDesc)
@@ -729,28 +748,28 @@ func Decode(r io.Reader) (img image.Image, err error) {
 	return decodeLevelSubImage(d, 0, rect)
 }
 
-func GeoTIFFInfo(r io.Reader) (Info, error) {
+func DecodeGeoInfo(r io.Reader) (GeoInfo, error) {
 	d, err := newDecoder(r)
 	if err != nil {
-		return Info{}, err
+		return GeoInfo{}, err
 	}
 	err = d.readIFD()
 	if err != nil {
-		return Info{}, err
+		return GeoInfo{}, err
 	}
 
 	dType, err := d.dataType()
 	if err != nil {
-		return Info{}, err
+		return GeoInfo{}, err
 	}
 
 	proj4, err := d.gt.Proj4()
 	if err != nil {
-		return Info{}, err
+		return GeoInfo{}, err
 	}
 
-	info := Info{Type: dType, Size: [2]uint32{d.gt.Overviews[0].ImageWidth, d.gt.Overviews[0].ImageHeight},
-		Geotransform: d.gt.Geotransform, Proj4: proj4, NoData: d.gt.NoData}
+	info := GeoInfo{Type: dType, Size: [2]uint32{d.gt.Overviews[0].ImageWidth, d.gt.Overviews[0].ImageHeight},
+		GeoTrans: d.gt.GeoTrans, Proj4: proj4, NoData: d.gt.NoData}
 
 	if len(d.gt.Overviews) > 1 {
 		for i := 1; i < len(d.gt.Overviews); i++ {

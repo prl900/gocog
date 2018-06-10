@@ -2,8 +2,8 @@ package gocog
 
 import (
 	"fmt"
-	"strings"
 	"regexp"
+	"strings"
 )
 
 type ModelType string
@@ -18,11 +18,11 @@ type ProjLinearUnits string
 type Projection string
 
 const (
-	Projected ModelType = "Projected"
+	Projected  ModelType = "Projected"
 	Geographic ModelType = "Geographic"
 	Geocentric ModelType = "Geocentric"
 
-	PixelIsArea RasterType = "PixelIsArea"
+	PixelIsArea  RasterType = "PixelIsArea"
 	PixelIsPoint RasterType = "PixelIsPoint"
 
 	//Section 6.3.1.3 codes
@@ -33,33 +33,31 @@ const (
 	AngularDegree GeogAngularUnits = "degree"
 
 	//Section 6.3.2.1 codes
-	GCS_WGS84 GeographicType = "WGS_84"
+	GCS_WGS84           GeographicType = "WGS_84"
 	UserDefinedGeogType GeographicType = "user-defined"
 
 	//Section 6.3.2.2 codes
-	DatumWGS84 GeogGeodeticDatum = "WGS_84"
+	DatumWGS84           GeogGeodeticDatum = "WGS_84"
 	UserDefinedGeodDatum GeogGeodeticDatum = "user-defined"
 
 	//Section 6.3.2.3 codes
-	EllipseWGS84 GeogEllipsoid = "WGS_84"
-	EllipseSphere GeogEllipsoid = "Sphere"
+	EllipseWGS84             GeogEllipsoid = "WGS_84"
+	EllipseSphere            GeogEllipsoid = "Sphere"
 	UserDefinedGeogEllipsoid GeogEllipsoid = "user-defined"
 
 	//Section 6.3.3.2 codes
 	UserDefinedProjection Projection = "user-defined"
 
-
 	//Section 6.3.3.3 codes
-	EPSG3857 ProjCSTType = "EPSG:3857"
-	PCS_WGS84_UTM_zone_1N ProjCSTType = "WGS84_UTM_zone_1N"
+	EPSG3857               ProjCSTType = "EPSG:3857"
+	PCS_WGS84_UTM_zone_1N  ProjCSTType = "WGS84_UTM_zone_1N"
 	PCS_WGS84_UTM_zone_33N ProjCSTType = "WGS84_UTM_zone_33N"
-	UserDefinedCSTType ProjCSTType = "user-defined"
+	UserDefinedCSTType     ProjCSTType = "user-defined"
 
 	//Section 6.3.3.3 codes
 	CTTransverseMercator ProjCoordTrans = "TransverseMercator"
-	CTAlbersEqualArea ProjCoordTrans = "AlbersEqualArea"
-	CTSinusoidal ProjCoordTrans = "Sinusoidal"
-
+	CTAlbersEqualArea    ProjCoordTrans = "AlbersEqualArea"
+	CTSinusoidal         ProjCoordTrans = "Sinusoidal"
 )
 
 type GeoData struct {
@@ -72,18 +70,18 @@ type GeoData struct {
 	GeogGeodeticDatum
 	GeogAngularUnits
 	GeogEllipsoid
-	GeogSemiMajorAxis float64
-	GeogSemiMinorAxis float64
-	GeogPrimeMeridian string
+	GeogSemiMajorAxis     float64
+	GeogSemiMinorAxis     float64
+	GeogPrimeMeridian     string
 	GeogPrimeMeridianLong float64
 
 	ProjCSTType
 	Projection
 	ProjCoordTrans
 	ProjLinearUnits
-	ProjFalseEasting float64
+	ProjFalseEasting  float64
 	ProjFalseNorthing float64
-	ProjCenterLong float64
+	ProjCenterLong    float64
 }
 
 type KeyEntry struct {
@@ -116,7 +114,7 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 		if k.TIFFTagLocation != GeoAsciiParamsTag {
 			return FormatError(fmt.Sprintf("GTCitationGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
-		g.Citation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
+		g.Citation = aParams[k.ValueOffset : k.ValueOffset+k.Count]
 	case GeographicTypeGeoKey:
 		switch k.ValueOffset {
 		case 4326:
@@ -130,7 +128,7 @@ func (g *GeoData) extract(k KeyEntry, dParams []float64, aParams string) error {
 		if k.TIFFTagLocation != GeoAsciiParamsTag {
 			return FormatError(fmt.Sprintf("GeogCitationGeoKey is pointing to an unexpected location: %d ", k.TIFFTagLocation))
 		}
-		g.GeogCitation = aParams[k.ValueOffset:k.ValueOffset+k.Count]
+		g.GeogCitation = aParams[k.ValueOffset : k.ValueOffset+k.Count]
 	case GeogGeodeticDatumGeoKey:
 		switch k.ValueOffset {
 		case 6326:
@@ -249,19 +247,17 @@ func parseGeoKeyDirectory(kEntries []KeyEntry, dParams []float64, aParams string
 		}
 	}
 
-
 	return gc, nil
 }
 
 type Citation struct {
-	GCS string
-	Datum string
+	GCS       string
+	Datum     string
 	Ellipsoid string
-	Primem string
+	Primem    string
 }
 
 func parseGeoAsciiParams(s string) Citation {
-	fmt.Println(s)
 	rawParams := strings.Split(s, "|")
 	gcs, _ := regexp.Compile(`\s*GCS\sName\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
 	datum, _ := regexp.Compile(`\s*Datum\s*=\s*(?P<name>[a-zA-Z-_ +()0-9]+)\s*`)
@@ -300,7 +296,7 @@ func (gd GeoData) WKT() (string, error) {
 	str += fmt.Sprintf(`GEOGCS["%s",`, cit.GCS)
 
 	str += "DATUM["
-	if cit.Datum  != "" {
+	if cit.Datum != "" {
 		str += fmt.Sprintf(`"%s",`, cit.Datum)
 	} else {
 		str += fmt.Sprintf(`"%s",`, string(gd.GeogGeodeticDatum))
