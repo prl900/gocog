@@ -60,10 +60,27 @@ type Overview struct {
 type GeoInfo struct {
 	Type         string     `json:"type"`
 	Size         [2]uint32  `json:"size"`
-	GeoTrans Geotransform `json:"geoTransform"`
+	GeoTrans Geotransform   `json:"geoTransform"`
 	Proj4        string     `json:"proj4"`
 	NoData       float64    `json:"noDataValue"`
 	Overviews    []Overview `json:"overviews"`
+}
+
+func (g GeoInfo) Geotransform(level int) (Geotransform, error) {
+	if level < 0 || level >= len(g.Overviews) {
+		return Geotransform{0,1,0,0,0,1}, fmt.Errorf("level %d not in this geotiff", level)
+	}
+
+	if level == 0 {
+		return g.GeoTrans, nil
+	}
+
+	ovr := g.Overviews[level]
+	xScale := float64(g.Size[0]/ovr.Size[0])
+	yScale := float64(g.Size[1]/ovr.Size[1])
+	geot := g.GeoTrans
+
+	return Geotransform{geot[0], geot[1]*xScale, 0, geot[3], 0, geot[5]*yScale}, nil
 }
 
 // TODO: Does cog need to support stripped files?
@@ -79,23 +96,6 @@ type GeoTIFF struct {
 	GDALMetadata string
 }
 
-func (g GeoTIFF) Geotransform(level int) (Geotransform, error) {
-	if level < 0 || level >= len(g.Overviews) {
-		return Geotransform{0,0,0,0,0,0}, fmt.Errorf("level %d not in this geotiff", level)
-	}
-
-	if level == 0 {
-		return g.GeoTrans, nil
-	}
-
-	geot := g.GeoTrans
-	base := g.Overviews[0]
-	ovr := g.Overviews[level]
-	xScale := float64(base.ImageWidth/ovr.ImageWidth)
-	yScale := float64(base.ImageHeight/ovr.ImageHeight)
-
-	return Geotransform{geot[0], geot[1]*xScale, 0, geot[3], 0, geot[5]*yScale}, nil
-}
 
 func (g GeoTIFF) Proj4() (string, error) {
 	if g.dParams == nil || g.aParams == "" {
