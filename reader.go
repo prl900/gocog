@@ -771,11 +771,9 @@ func DecodeGeoInfo(r io.Reader) (GeoInfo, error) {
 	info := GeoInfo{Type: dType, Size: [2]uint32{d.gt.Overviews[0].ImageWidth, d.gt.Overviews[0].ImageHeight},
 		GeoTrans: d.gt.GeoTrans, Proj4: proj4, NoData: d.gt.NoData}
 
-	if len(d.gt.Overviews) > 1 {
-		for i := 1; i < len(d.gt.Overviews); i++ {
-			info.Overviews = append(info.Overviews, Overview{Size: [2]uint32{d.gt.Overviews[i].ImageWidth,
-				d.gt.Overviews[i].ImageHeight}})
-		}
+	for i := 0; i < len(d.gt.Overviews); i++ {
+		info.Overviews = append(info.Overviews, Overview{Size: [2]uint32{d.gt.Overviews[i].ImageWidth,
+			d.gt.Overviews[i].ImageHeight}})
 	}
 
 	return info, nil
